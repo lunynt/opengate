@@ -26,6 +26,10 @@ public final class OpenGateMessages {
             totp-setup=Copy this setup URI into your authenticator, then use /2fa confirm <code>:
             totp-enabled=Two-factor authentication enabled.
             totp-disabled=Two-factor authentication disabled.
+            password-changed=Password changed successfully.
+            logged-out=Logged out. Reconnect to authenticate again.
+            account-deleted=Your OpenGate account was deleted.
+            account-action-failed=Account action failed. Check your password and try again.
             """;
 
     private final Map<String, String> messages;

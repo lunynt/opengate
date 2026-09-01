@@ -84,6 +84,11 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
         session.beginPasswordVerification();
         plugin.openGate().accounts().authenticate(player.getUniqueId(), password, address).whenComplete((result, error) -> {
             if (!player.isActive()) return;
+            if (result == AuthenticationResult.RATE_LIMITED) {
+                session.close();
+                player.disconnect(message("rate-limited"));
+                return;
+            }
             if (error != null || result != AuthenticationResult.SUCCESS) {
                 if (session.rejectPassword(plugin.openGate().config().maximumLoginAttempts())) {
                     player.disconnect(message("too-many-attempts"));

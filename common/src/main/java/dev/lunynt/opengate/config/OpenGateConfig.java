@@ -13,6 +13,8 @@ public record OpenGateConfig(
         Duration authenticationTimeout,
         Duration trustedSessionLifetime,
         int maximumLoginAttempts,
+        int maximumIpFailures,
+        Duration ipFailureWindow,
         int minimumPasswordLength,
         int maximumPasswordLength,
         boolean premiumLookupEnabled,
@@ -25,6 +27,8 @@ public record OpenGateConfig(
             authentication-timeout-seconds=60
             trusted-session-hours=6
             maximum-login-attempts=3
+            maximum-ip-failures=10
+            ip-failure-window-minutes=10
             minimum-password-length=8
             maximum-password-length=128
             premium-lookup-enabled=true
@@ -42,6 +46,12 @@ public record OpenGateConfig(
         }
         if (maximumLoginAttempts < 1 || maximumLoginAttempts > 20) {
             throw new IllegalArgumentException("maximum login attempts must be between 1 and 20");
+        }
+        if (maximumIpFailures < maximumLoginAttempts || maximumIpFailures > 1_000) {
+            throw new IllegalArgumentException("maximum IP failures must be at least the session limit and at most 1000");
+        }
+        if (ipFailureWindow.isNegative() || ipFailureWindow.isZero()) {
+            throw new IllegalArgumentException("IP failure window must be positive");
         }
         if (minimumPasswordLength < 8 || maximumPasswordLength < minimumPasswordLength) {
             throw new IllegalArgumentException("invalid password length range");
@@ -63,6 +73,8 @@ public record OpenGateConfig(
                 Duration.ofSeconds(integer(properties, "authentication-timeout-seconds")),
                 Duration.ofHours(integer(properties, "trusted-session-hours")),
                 integer(properties, "maximum-login-attempts"),
+                integer(properties, "maximum-ip-failures"),
+                Duration.ofMinutes(integer(properties, "ip-failure-window-minutes")),
                 integer(properties, "minimum-password-length"),
                 integer(properties, "maximum-password-length"),
                 Boolean.parseBoolean(required(properties, "premium-lookup-enabled")),

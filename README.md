@@ -29,7 +29,10 @@ Requires Java 25. Build and test every module with:
 - Passwords use versioned Argon2id hashes (`64 MiB`, three iterations); hashing runs on a bounded worker pool.
 - Accounts persist in `plugins/OpenGate/opengate.db` using SQLite WAL mode.
 - Authentication expires after 60 seconds and closes after three incorrect passwords.
+- Reconnects cannot reset brute-force protection: IP addresses are limited to ten failures per rolling ten-minute window by default.
 - Paper blocks movement, chat, commands, inventory actions, interaction, damage, and block changes until authentication.
 - Velocity redirects unauthenticated players to a registered server named `limbo`, then sends them to the first non-limbo server after authentication.
 
 Two-factor authentication is available through `/2fa setup <password>`, `/2fa confirm <code>`, `/totp <code>`, and `/2fa disable <password>`. TOTP secrets are encrypted with AES-256-GCM using `plugins/OpenGate/secret.key`; back up this key with the database because losing it makes enrolled TOTP secrets unrecoverable.
+
+On first launch OpenGate creates `config.properties` and `messages.properties`. Authentication timing, password bounds, IP limits, premium lookup, limbo routing, lobby order, and player messages can be changed without rebuilding the plugin.

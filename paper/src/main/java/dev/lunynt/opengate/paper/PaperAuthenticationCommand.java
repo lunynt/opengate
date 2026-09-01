@@ -84,6 +84,11 @@ final class PaperAuthenticationCommand implements CommandExecutor {
         plugin.openGate().accounts().authenticate(player.getUniqueId(), password, address).whenComplete((result, error) ->
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     if (!player.isOnline()) return;
+                    if (result == AuthenticationResult.RATE_LIMITED) {
+                        session.close();
+                        player.kick(message("rate-limited"));
+                        return;
+                    }
                     if (error != null || result != AuthenticationResult.SUCCESS) {
                         if (session.rejectPassword(plugin.openGate().config().maximumLoginAttempts())) {
                             player.kick(message("too-many-attempts"));

@@ -7,6 +7,7 @@ import dev.lunynt.opengate.account.Account;
 import dev.lunynt.opengate.account.AccountRepository;
 import dev.lunynt.opengate.auth.IdentityType;
 import dev.lunynt.opengate.crypto.SecretCipher;
+import dev.lunynt.opengate.audit.AuditLog;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -27,7 +28,8 @@ class TotpEnrollmentServiceTest {
                 repository,
                 totp,
                 new SecretCipher(new SecretKeySpec(new byte[32], "AES")),
-                clock);
+                clock,
+                AuditLog.noop());
 
         var uri = service.begin(account);
         var secret = uri.substring(uri.indexOf("secret=") + 7, uri.indexOf("&issuer="));

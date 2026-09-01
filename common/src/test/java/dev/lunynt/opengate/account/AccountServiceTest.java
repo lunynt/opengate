@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.lunynt.opengate.auth.IdentityType;
 import dev.lunynt.opengate.crypto.Argon2idPasswordHasher;
+import dev.lunynt.opengate.audit.AuditLog;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -30,7 +31,8 @@ class AccountServiceTest {
                 clock,
                 8,
                 128,
-                new LoginRateLimiter(10, Duration.ofMinutes(10), clock))) {
+                new LoginRateLimiter(10, Duration.ofMinutes(10), clock),
+                AuditLog.noop())) {
             var playerId = UUID.randomUUID();
             var password = "correct horse battery staple".toCharArray();
             var account = service.register(playerId, "Player", IdentityType.OFFLINE, password, "127.0.0.1").join();
@@ -59,7 +61,8 @@ class AccountServiceTest {
                 clock,
                 8,
                 128,
-                new LoginRateLimiter(10, Duration.ofMinutes(10), clock))) {
+                new LoginRateLimiter(10, Duration.ofMinutes(10), clock),
+                AuditLog.noop())) {
             var playerId = UUID.randomUUID();
             service.register(
                             playerId,

@@ -3,6 +3,8 @@ package dev.lunynt.opengate.totp;
 import dev.lunynt.opengate.account.Account;
 import dev.lunynt.opengate.account.AccountRepository;
 import dev.lunynt.opengate.crypto.SecretCipher;
+import dev.lunynt.opengate.audit.AuditEventType;
+import dev.lunynt.opengate.audit.AuditLog;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -17,14 +19,20 @@ public final class TotpEnrollmentService {
     private final TotpService totp;
     private final SecretCipher secrets;
     private final Clock clock;
+    private final AuditLog auditLog;
     private final ConcurrentHashMap<UUID, PendingEnrollment> pending = new ConcurrentHashMap<>();
 
     public TotpEnrollmentService(
-            AccountRepository accounts, TotpService totp, SecretCipher secrets, Clock clock) {
+            AccountRepository accounts,
+            TotpService totp,
+            SecretCipher secrets,
+            Clock clock,
+            AuditLog auditLog) {
         this.accounts = accounts;
         this.totp = totp;
         this.secrets = secrets;
         this.clock = clock;
+        this.auditLog = auditLog;
     }
 
     public String begin(Account account) {
@@ -44,6 +52,7 @@ public final class TotpEnrollmentService {
         }
         var account = accounts.findByPlayerId(playerId).orElseThrow();
         accounts.save(account.withTotpSecret(secrets.encrypt(enrollment.secret())));
+        auditLog.record(AuditEventType.TOTP_ENABLED, playerId, account.username(), null, null);
         pending.remove(playerId);
         return true;
     }
@@ -58,6 +67,12 @@ public final class TotpEnrollmentService {
     public void disable(Account account) {
         accounts.save(account.withTotpSecret(null));
         pending.remove(account.playerId());
+        auditLog.record(
+                AuditEventType.TOTP_DISABLED,
+                account.playerId(),
+                account.username(),
+                null,
+                null);
     }
 
     private record PendingEnrollment(String secret, Instant expiresAt) {}

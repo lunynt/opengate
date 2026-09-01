@@ -3,6 +3,9 @@ package dev.lunynt.opengate;
 import dev.lunynt.opengate.account.AccountService;
 import dev.lunynt.opengate.account.SqliteAccountRepository;
 import dev.lunynt.opengate.account.LoginRateLimiter;
+import dev.lunynt.opengate.audit.AddressFingerprint;
+import dev.lunynt.opengate.audit.AuditLog;
+import dev.lunynt.opengate.audit.SqliteAuditLog;
 import dev.lunynt.opengate.auth.SessionRegistry;
 import dev.lunynt.opengate.crypto.Argon2idPasswordHasher;
 import dev.lunynt.opengate.crypto.SecretCipher;
@@ -26,6 +29,7 @@ public final class OpenGate implements AutoCloseable {
     private final ProfileLookup profiles;
     private final IdentityResolver identities;
     private final TotpEnrollmentService totp;
+    private final AuditLog auditLog;
 
     private OpenGate(
             SessionRegistry sessions,
@@ -34,7 +38,8 @@ public final class OpenGate implements AutoCloseable {
             OpenGateMessages messages,
             ProfileLookup profiles,
             IdentityResolver identities,
-            TotpEnrollmentService totp) {
+            TotpEnrollmentService totp,
+            AuditLog auditLog) {
         this.sessions = sessions;
         this.accounts = accounts;
         this.config = config;
@@ -42,13 +47,17 @@ public final class OpenGate implements AutoCloseable {
         this.profiles = profiles;
         this.identities = identities;
         this.totp = totp;
+        this.auditLog = auditLog;
     }
 
     public static OpenGate create(Path dataDirectory) {
         var clock = Clock.systemUTC();
         var config = OpenGateConfig.load(dataDirectory);
         var messages = OpenGateMessages.load(dataDirectory);
-        var repository = new SqliteAccountRepository(dataDirectory.resolve("opengate.db"));
+        var databaseFile = dataDirectory.resolve("opengate.db");
+        var repository = new SqliteAccountRepository(databaseFile);
+        var secretKey = SecretKeyFile.loadOrCreate(dataDirectory.resolve("secret.key"));
+        var auditLog = new SqliteAuditLog(databaseFile, clock, new AddressFingerprint(secretKey));
         var cryptoExecutor = Executors.newFixedThreadPool(2, Thread.ofPlatform()
                 .name("opengate-crypto-", 0)
                 .factory());
@@ -59,7 +68,8 @@ public final class OpenGate implements AutoCloseable {
                 clock,
                 config.minimumPasswordLength(),
                 config.maximumPasswordLength(),
-                new LoginRateLimiter(config.maximumIpFailures(), config.ipFailureWindow(), clock));
+                new LoginRateLimiter(config.maximumIpFailures(), config.ipFailureWindow(), clock),
+                auditLog);
         var profiles = new MojangProfileLookup(config.premiumLookupTimeout());
         return new OpenGate(
                 new SessionRegistry(clock),
@@ -71,8 +81,10 @@ public final class OpenGate implements AutoCloseable {
                 new TotpEnrollmentService(
                         repository,
                         new TotpService(clock),
-                        new SecretCipher(SecretKeyFile.loadOrCreate(dataDirectory.resolve("secret.key"))),
-                        clock));
+                        new SecretCipher(secretKey),
+                        clock,
+                        auditLog),
+                auditLog);
     }
 
     public SessionRegistry sessions() {
@@ -101,6 +113,10 @@ public final class OpenGate implements AutoCloseable {
 
     public TotpEnrollmentService totp() {
         return totp;
+    }
+
+    public AuditLog auditLog() {
+        return auditLog;
     }
 
     @Override

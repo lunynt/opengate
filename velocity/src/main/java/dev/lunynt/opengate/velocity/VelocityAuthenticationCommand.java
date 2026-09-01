@@ -11,7 +11,9 @@ import net.kyori.adventure.text.Component;
 final class VelocityAuthenticationCommand implements SimpleCommand {
     enum Type {
         LOGIN,
-        REGISTER
+        REGISTER,
+        TOTP,
+        MANAGE_TOTP
     }
 
     private final OpenGateVelocityPlugin plugin;
@@ -28,10 +30,11 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
             invocation.source().sendMessage(Component.text("This command can only be used by players."));
             return;
         }
-        if (type == Type.REGISTER) {
-            register(player, invocation.arguments());
-        } else {
-            login(player, invocation.arguments());
+        switch (type) {
+            case REGISTER -> register(player, invocation.arguments());
+            case LOGIN -> login(player, invocation.arguments());
+            case TOTP -> totp(player, invocation.arguments());
+            case MANAGE_TOTP -> manageTotp(player, invocation.arguments());
         }
     }
 
@@ -95,10 +98,84 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
                 player.sendMessage(message("login-success"));
                 plugin.connectToLobby(player);
             } else {
-                player.sendMessage(Component.text("Enter your TOTP code to continue."));
+                player.sendMessage(message("totp-prompt"));
             }
         });
         Arrays.fill(password, '\0');
+    }
+
+    private void totp(Player player, String[] arguments) {
+        if (arguments.length != 1) {
+            player.sendMessage(Component.text("Usage: /totp <code>"));
+            return;
+        }
+        var session = plugin.openGate().sessions().find(player.getUniqueId()).orElse(null);
+        var account = plugin.openGate().accounts().find(player.getUniqueId()).orElse(null);
+        if (session == null || account == null || session.state() != AuthenticationState.AWAITING_TOTP) {
+            player.sendMessage(Component.text("Two-factor authentication is not required."));
+            return;
+        }
+        if (!plugin.openGate().totp().verify(account, arguments[0])) {
+            player.sendMessage(message("totp-invalid"));
+            return;
+        }
+        session.acceptTotp();
+        session.release();
+        player.sendMessage(message("totp-success"));
+        plugin.connectToLobby(player);
+    }
+
+    private void manageTotp(Player player, String[] arguments) {
+        if (!isReleased(player) || arguments.length == 0) {
+            player.sendMessage(Component.text("Usage: /2fa setup <password> | confirm <code> | disable <password>"));
+            return;
+        }
+        switch (arguments[0].toLowerCase(java.util.Locale.ROOT)) {
+            case "setup" -> verifyPasswordThen(player, arguments, () -> {
+                var account = plugin.openGate().accounts().find(player.getUniqueId()).orElseThrow();
+                var uri = plugin.openGate().totp().begin(account);
+                player.sendMessage(message("totp-setup").append(Component.space()).append(
+                        Component.text(uri).clickEvent(net.kyori.adventure.text.event.ClickEvent.copyToClipboard(uri))));
+            });
+            case "confirm" -> {
+                if (arguments.length != 2 || !plugin.openGate().totp().confirm(player.getUniqueId(), arguments[1])) {
+                    player.sendMessage(message("totp-invalid"));
+                } else {
+                    player.sendMessage(message("totp-enabled"));
+                }
+            }
+            case "disable" -> verifyPasswordThen(player, arguments, () -> {
+                var account = plugin.openGate().accounts().find(player.getUniqueId()).orElseThrow();
+                plugin.openGate().totp().disable(account);
+                player.sendMessage(message("totp-disabled"));
+            });
+            default -> player.sendMessage(
+                    Component.text("Usage: /2fa setup <password> | confirm <code> | disable <password>"));
+        }
+    }
+
+    private void verifyPasswordThen(Player player, String[] arguments, Runnable action) {
+        if (arguments.length != 2) {
+            player.sendMessage(Component.text("This action requires your current password."));
+            return;
+        }
+        var password = arguments[1].toCharArray();
+        var address = player.getRemoteAddress().getAddress().getHostAddress();
+        plugin.openGate().accounts().authenticate(player.getUniqueId(), password, address).whenComplete((result, error) -> {
+            if (!player.isActive()) return;
+            if (error != null || result != AuthenticationResult.SUCCESS) {
+                player.sendMessage(message("incorrect-password"));
+            } else {
+                action.run();
+            }
+        });
+        Arrays.fill(password, '\0');
+    }
+
+    private boolean isReleased(Player player) {
+        return plugin.openGate().sessions().find(player.getUniqueId())
+                .map(session -> session.state() == AuthenticationState.RELEASED)
+                .orElse(false);
     }
 
     private static String rootMessage(Throwable error) {

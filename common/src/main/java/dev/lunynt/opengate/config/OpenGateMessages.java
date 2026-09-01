@@ -19,6 +19,12 @@ public final class OpenGateMessages {
             invalid-username=Username must contain 3-16 letters, numbers, or underscores.
             username-case-mismatch=Use the exact capitalization registered for this username.
             profile-lookup-unavailable=Could not verify account ownership. Try again shortly.
+            totp-prompt=Enter your authenticator code with /totp <code>.
+            totp-invalid=That authenticator code is invalid.
+            totp-success=Two-factor authentication complete.
+            totp-setup=Copy this setup URI into your authenticator, then use /2fa confirm <code>:
+            totp-enabled=Two-factor authentication enabled.
+            totp-disabled=Two-factor authentication disabled.
             """;
 
     private final Map<String, String> messages;

@@ -21,7 +21,7 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 final class PaperAuthenticationListener implements Listener {
-    private static final Set<String> ALLOWED_COMMANDS = Set.of("login", "l", "register", "reg");
+    private static final Set<String> ALLOWED_COMMANDS = Set.of("login", "l", "register", "reg", "totp", "2fa");
 
     private final OpenGatePaperPlugin plugin;
 

@@ -12,3 +12,9 @@ commands:
     description: Register an OpenGate account
     usage: /register <password> <password>
     aliases: [reg]
+  totp:
+    description: Complete two-factor authentication
+    usage: /totp <code>
+  2fa:
+    description: Manage two-factor authentication
+    usage: /2fa <setup|confirm|disable>

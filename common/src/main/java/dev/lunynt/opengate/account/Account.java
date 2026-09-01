@@ -50,4 +50,16 @@ public record Account(
                 Objects.requireNonNull(instant, "instant"),
                 Objects.requireNonNull(address, "address"));
     }
+
+    public Account withTotpSecret(String encryptedSecret) {
+        return new Account(
+                playerId,
+                username,
+                identityType,
+                passwordHash,
+                encryptedSecret,
+                createdAt,
+                lastAuthenticatedAt,
+                lastAddress);
+    }
 }

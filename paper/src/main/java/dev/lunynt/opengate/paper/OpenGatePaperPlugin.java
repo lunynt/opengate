@@ -20,6 +20,8 @@ public final class OpenGatePaperPlugin extends JavaPlugin {
         var commands = new PaperAuthenticationCommand(this);
         java.util.Objects.requireNonNull(getCommand("login")).setExecutor(commands);
         java.util.Objects.requireNonNull(getCommand("register")).setExecutor(commands);
+        java.util.Objects.requireNonNull(getCommand("totp")).setExecutor(commands);
+        java.util.Objects.requireNonNull(getCommand("2fa")).setExecutor(commands);
         getLogger().info("OpenGate authentication engine enabled on Paper");
     }
 

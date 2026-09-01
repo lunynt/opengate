@@ -32,4 +32,4 @@ Requires Java 25. Build and test every module with:
 - Paper blocks movement, chat, commands, inventory actions, interaction, damage, and block changes until authentication.
 - Velocity redirects unauthenticated players to a registered server named `limbo`, then sends them to the first non-limbo server after authentication.
 
-TOTP is represented in the state model and database schema, but enrollment and verification commands are not implemented yet.
+Two-factor authentication is available through `/2fa setup <password>`, `/2fa confirm <code>`, `/totp <code>`, and `/2fa disable <password>`. TOTP secrets are encrypted with AES-256-GCM using `plugins/OpenGate/secret.key`; back up this key with the database because losing it makes enrolled TOTP secrets unrecoverable.

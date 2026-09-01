@@ -48,4 +48,47 @@ class AccountServiceTest {
             assertEquals(account.createdAt(), updated.createdAt());
         }
     }
+
+    @Test
+    void changesPasswordRevokesSessionAndDeletesAccount() {
+        var clock = Clock.fixed(Instant.parse("2026-09-01T12:00:00Z"), ZoneOffset.UTC);
+        try (var service = new AccountService(
+                new SqliteAccountRepository(directory.resolve("lifecycle.db")),
+                new Argon2idPasswordHasher(),
+                Executors.newSingleThreadExecutor(),
+                clock,
+                8,
+                128,
+                new LoginRateLimiter(10, Duration.ofMinutes(10), clock))) {
+            var playerId = UUID.randomUUID();
+            service.register(
+                            playerId,
+                            "Player",
+                            IdentityType.OFFLINE,
+                            "old password".toCharArray(),
+                            "127.0.0.1")
+                    .join();
+
+            assertEquals(
+                    AccountActionResult.SUCCESS,
+                    service.changePassword(
+                                    playerId,
+                                    "old password".toCharArray(),
+                                    "new password".toCharArray(),
+                                    "127.0.0.1")
+                            .join());
+            assertEquals(
+                    AuthenticationResult.SUCCESS,
+                    service.authenticate(playerId, "new password".toCharArray(), "127.0.0.1").join());
+
+            service.revokeTrustedSession(playerId);
+            assertFalse(service.hasTrustedSession(
+                    service.find(playerId).orElseThrow(), "127.0.0.1", Duration.ofHours(1)));
+
+            assertEquals(
+                    AccountActionResult.SUCCESS,
+                    service.delete(playerId, "new password".toCharArray(), "127.0.0.1").join());
+            assertTrue(service.find(playerId).isEmpty());
+        }
+    }
 }

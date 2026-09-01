@@ -103,6 +103,17 @@ public final class SqliteAccountRepository implements AccountRepository {
         }
     }
 
+    @Override
+    public void delete(UUID playerId) {
+        try (var connection = connection();
+                var statement = connection.prepareStatement("DELETE FROM accounts WHERE player_id = ?")) {
+            statement.setString(1, playerId.toString());
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw new IllegalStateException("could not delete OpenGate account", exception);
+        }
+    }
+
     private Connection connection() throws SQLException {
         return DriverManager.getConnection(jdbcUrl);
     }

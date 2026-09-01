@@ -10,6 +10,8 @@ public interface AccountRepository extends AutoCloseable {
 
     void save(Account account);
 
+    void delete(UUID playerId);
+
     @Override
     default void close() {}
 }

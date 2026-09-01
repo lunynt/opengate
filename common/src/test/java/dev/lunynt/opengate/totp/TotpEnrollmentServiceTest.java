@@ -59,5 +59,10 @@ class TotpEnrollmentServiceTest {
         public void save(Account account) {
             this.account = account;
         }
+
+        @Override
+        public void delete(UUID playerId) {
+            throw new UnsupportedOperationException();
+        }
     }
 }

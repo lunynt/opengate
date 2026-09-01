@@ -48,6 +48,12 @@ public final class OpenGateVelocityPlugin {
         commandManager.register(
                 commandManager.metaBuilder("register").aliases("reg").plugin(this).build(),
                 new VelocityAuthenticationCommand(this, VelocityAuthenticationCommand.Type.REGISTER));
+        commandManager.register(
+                commandManager.metaBuilder("totp").plugin(this).build(),
+                new VelocityAuthenticationCommand(this, VelocityAuthenticationCommand.Type.TOTP));
+        commandManager.register(
+                commandManager.metaBuilder("2fa").plugin(this).build(),
+                new VelocityAuthenticationCommand(this, VelocityAuthenticationCommand.Type.MANAGE_TOTP));
         logger.info("OpenGate authentication engine enabled on Velocity");
     }
 

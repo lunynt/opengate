@@ -4,11 +4,15 @@ import dev.lunynt.opengate.account.AccountService;
 import dev.lunynt.opengate.account.SqliteAccountRepository;
 import dev.lunynt.opengate.auth.SessionRegistry;
 import dev.lunynt.opengate.crypto.Argon2idPasswordHasher;
+import dev.lunynt.opengate.crypto.SecretCipher;
+import dev.lunynt.opengate.crypto.SecretKeyFile;
 import dev.lunynt.opengate.config.OpenGateConfig;
 import dev.lunynt.opengate.config.OpenGateMessages;
 import dev.lunynt.opengate.identity.MojangProfileLookup;
 import dev.lunynt.opengate.identity.ProfileLookup;
 import dev.lunynt.opengate.identity.IdentityResolver;
+import dev.lunynt.opengate.totp.TotpEnrollmentService;
+import dev.lunynt.opengate.totp.TotpService;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.concurrent.Executors;
@@ -20,6 +24,7 @@ public final class OpenGate implements AutoCloseable {
     private final OpenGateMessages messages;
     private final ProfileLookup profiles;
     private final IdentityResolver identities;
+    private final TotpEnrollmentService totp;
 
     private OpenGate(
             SessionRegistry sessions,
@@ -27,13 +32,15 @@ public final class OpenGate implements AutoCloseable {
             OpenGateConfig config,
             OpenGateMessages messages,
             ProfileLookup profiles,
-            IdentityResolver identities) {
+            IdentityResolver identities,
+            TotpEnrollmentService totp) {
         this.sessions = sessions;
         this.accounts = accounts;
         this.config = config;
         this.messages = messages;
         this.profiles = profiles;
         this.identities = identities;
+        this.totp = totp;
     }
 
     public static OpenGate create(Path dataDirectory) {
@@ -58,7 +65,12 @@ public final class OpenGate implements AutoCloseable {
                 config,
                 messages,
                 profiles,
-                new IdentityResolver(repository, profiles, config.premiumLookupEnabled()));
+                new IdentityResolver(repository, profiles, config.premiumLookupEnabled()),
+                new TotpEnrollmentService(
+                        repository,
+                        new TotpService(clock),
+                        new SecretCipher(SecretKeyFile.loadOrCreate(dataDirectory.resolve("secret.key"))),
+                        clock));
     }
 
     public SessionRegistry sessions() {
@@ -83,6 +95,10 @@ public final class OpenGate implements AutoCloseable {
 
     public IdentityResolver identities() {
         return identities;
+    }
+
+    public TotpEnrollmentService totp() {
+        return totp;
     }
 
     @Override

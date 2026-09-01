@@ -15,7 +15,7 @@ import java.util.Set;
 import net.kyori.adventure.text.Component;
 
 final class VelocityAuthenticationListener {
-    private static final Set<String> ALLOWED_COMMANDS = Set.of("login", "l", "register", "reg");
+    private static final Set<String> ALLOWED_COMMANDS = Set.of("login", "l", "register", "reg", "totp", "2fa");
 
     private final OpenGateVelocityPlugin plugin;
 

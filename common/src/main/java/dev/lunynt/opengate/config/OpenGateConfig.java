@@ -1,0 +1,114 @@
+package dev.lunynt.opengate.config;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.List;
+import java.util.Properties;
+
+public record OpenGateConfig(
+        Duration authenticationTimeout,
+        Duration trustedSessionLifetime,
+        int maximumLoginAttempts,
+        int minimumPasswordLength,
+        int maximumPasswordLength,
+        boolean premiumLookupEnabled,
+        Duration premiumLookupTimeout,
+        String limboServer,
+        List<String> lobbyServers) {
+
+    private static final String DEFAULTS = """
+            # OpenGate configuration
+            authentication-timeout-seconds=60
+            trusted-session-hours=6
+            maximum-login-attempts=3
+            minimum-password-length=8
+            maximum-password-length=128
+            premium-lookup-enabled=true
+            premium-lookup-timeout-millis=3000
+            velocity-limbo-server=limbo
+            velocity-lobby-servers=lobby
+            """;
+
+    public OpenGateConfig {
+        if (authenticationTimeout.isNegative() || authenticationTimeout.isZero()) {
+            throw new IllegalArgumentException("authentication timeout must be positive");
+        }
+        if (trustedSessionLifetime.isNegative()) {
+            throw new IllegalArgumentException("trusted session lifetime must not be negative");
+        }
+        if (maximumLoginAttempts < 1 || maximumLoginAttempts > 20) {
+            throw new IllegalArgumentException("maximum login attempts must be between 1 and 20");
+        }
+        if (minimumPasswordLength < 8 || maximumPasswordLength < minimumPasswordLength) {
+            throw new IllegalArgumentException("invalid password length range");
+        }
+        if (premiumLookupTimeout.isNegative() || premiumLookupTimeout.isZero()) {
+            throw new IllegalArgumentException("premium lookup timeout must be positive");
+        }
+        if (limboServer.isBlank()) {
+            throw new IllegalArgumentException("Velocity limbo server must not be blank");
+        }
+        lobbyServers = List.copyOf(lobbyServers);
+    }
+
+    public static OpenGateConfig load(Path dataDirectory) {
+        var file = dataDirectory.resolve("config.properties");
+        createDefault(file, DEFAULTS);
+        var properties = loadProperties(file);
+        return new OpenGateConfig(
+                Duration.ofSeconds(integer(properties, "authentication-timeout-seconds")),
+                Duration.ofHours(integer(properties, "trusted-session-hours")),
+                integer(properties, "maximum-login-attempts"),
+                integer(properties, "minimum-password-length"),
+                integer(properties, "maximum-password-length"),
+                Boolean.parseBoolean(required(properties, "premium-lookup-enabled")),
+                Duration.ofMillis(integer(properties, "premium-lookup-timeout-millis")),
+                required(properties, "velocity-limbo-server"),
+                properties.getProperty("velocity-lobby-servers", "lobby").lines()
+                        .flatMap(line -> java.util.Arrays.stream(line.split(",")))
+                        .map(String::trim)
+                        .filter(value -> !value.isEmpty())
+                        .toList());
+    }
+
+    static Properties loadProperties(Path file) {
+        var properties = new Properties();
+        try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            properties.load(reader);
+            return properties;
+        } catch (IOException exception) {
+            throw new IllegalStateException("could not read " + file, exception);
+        }
+    }
+
+    static void createDefault(Path file, String contents) {
+        try {
+            Files.createDirectories(file.getParent());
+            if (Files.notExists(file)) {
+                Files.writeString(file, contents, StandardCharsets.UTF_8);
+            }
+        } catch (IOException exception) {
+            throw new IllegalStateException("could not create " + file, exception);
+        }
+    }
+
+    private static int integer(Properties properties, String key) {
+        try {
+            return Integer.parseInt(required(properties, key));
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException(key + " must be an integer", exception);
+        }
+    }
+
+    private static String required(Properties properties, String key) {
+        var value = properties.getProperty(key);
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("missing configuration value: " + key);
+        }
+        return value.trim();
+    }
+}

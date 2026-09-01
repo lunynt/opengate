@@ -60,5 +60,10 @@ class IdentityResolverTest {
         public void save(Account account) {
             values.put(account.normalizedUsername(), account);
         }
+
+        @Override
+        public void delete(UUID playerId) {
+            values.values().removeIf(account -> account.playerId().equals(playerId));
+        }
     }
 }

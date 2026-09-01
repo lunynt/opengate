@@ -62,4 +62,28 @@ public record Account(
                 lastAuthenticatedAt,
                 lastAddress);
     }
+
+    public Account withPasswordHash(String newPasswordHash) {
+        return new Account(
+                playerId,
+                username,
+                identityType,
+                newPasswordHash,
+                totpSecret,
+                createdAt,
+                lastAuthenticatedAt,
+                lastAddress);
+    }
+
+    public Account withoutTrustedSession() {
+        return new Account(
+                playerId,
+                username,
+                identityType,
+                passwordHash,
+                totpSecret,
+                createdAt,
+                null,
+                null);
+    }
 }

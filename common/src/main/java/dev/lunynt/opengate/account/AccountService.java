@@ -97,6 +97,61 @@ public final class AccountService implements AutoCloseable {
         return accounts.findByPlayerId(playerId);
     }
 
+    public CompletableFuture<AccountActionResult> changePassword(
+            UUID playerId, char[] currentPassword, char[] newPassword, String address) {
+        validatePassword(newPassword);
+        return authenticatedAction(playerId, currentPassword, address, account -> {
+            accounts.save(account.withPasswordHash(passwords.hash(newPassword)).authenticatedAt(clock.instant(), address));
+        }, newPassword);
+    }
+
+    public CompletableFuture<AccountActionResult> delete(
+            UUID playerId, char[] currentPassword, String address) {
+        return authenticatedAction(playerId, currentPassword, address, account -> accounts.delete(playerId));
+    }
+
+    public void revokeTrustedSession(UUID playerId) {
+        accounts.findByPlayerId(playerId).ifPresent(account -> accounts.save(account.withoutTrustedSession()));
+    }
+
+    private CompletableFuture<AccountActionResult> authenticatedAction(
+            UUID playerId,
+            char[] currentPassword,
+            String address,
+            java.util.function.Consumer<Account> action,
+            char[]... additionalSecrets) {
+        var ownedPassword = Arrays.copyOf(currentPassword, currentPassword.length);
+        var ownedAdditional = java.util.Arrays.stream(additionalSecrets)
+                .map(value -> Arrays.copyOf(value, value.length))
+                .toArray(char[][]::new);
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                if (loginRateLimiter.isBlocked(address)) return AccountActionResult.RATE_LIMITED;
+                var account = accounts.findByPlayerId(playerId);
+                if (account.isEmpty() || account.orElseThrow().passwordHash() == null) {
+                    return AccountActionResult.ACCOUNT_NOT_FOUND;
+                }
+                if (!passwords.verify(ownedPassword, account.orElseThrow().passwordHash())) {
+                    loginRateLimiter.recordFailure(address);
+                    return AccountActionResult.WRONG_PASSWORD;
+                }
+                loginRateLimiter.clear(address);
+                if (ownedAdditional.length == 0) {
+                    action.accept(account.orElseThrow());
+                } else {
+                    var replacement = ownedAdditional[0];
+                    accounts.save(account.orElseThrow()
+                            .withPasswordHash(passwords.hash(replacement))
+                            .authenticatedAt(clock.instant(), address));
+                }
+                return AccountActionResult.SUCCESS;
+            } finally {
+                Arrays.fill(ownedPassword, '\0');
+                for (var secret : ownedAdditional) Arrays.fill(secret, '\0');
+            }
+        }, cryptoExecutor);
+    }
+
     public boolean hasTrustedSession(Account account, String address, Duration lifetime) {
         if (account.lastAuthenticatedAt() == null || account.lastAddress() == null) {
             return false;

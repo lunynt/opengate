@@ -35,4 +35,14 @@ Requires Java 25. Build and test every module with:
 
 Two-factor authentication is available through `/2fa setup <password>`, `/2fa confirm <code>`, `/totp <code>`, and `/2fa disable <password>`. TOTP secrets are encrypted with AES-256-GCM using `plugins/OpenGate/secret.key`; back up this key with the database because losing it makes enrolled TOTP secrets unrecoverable.
 
+Authenticated players can manage their account with:
+
+```text
+/account password <current> <new>
+/account logout
+/account delete <password> confirm
+```
+
+Password changes and deletion run Argon2id verification outside the server thread. Logout revokes the persisted trusted session, while deletion removes the account and immediately closes the active authentication session.
+
 On first launch OpenGate creates `config.properties` and `messages.properties`. Authentication timing, password bounds, IP limits, premium lookup, limbo routing, lobby order, and player messages can be changed without rebuilding the plugin.

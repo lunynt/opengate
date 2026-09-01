@@ -13,6 +13,7 @@ public final class OpenGateMessages {
             registration-success=Registration complete.
             incorrect-password=Incorrect password.
             too-many-attempts=Too many failed login attempts.
+            rate-limited=Too many failed logins from your address. Try again later.
             authentication-timeout=Authentication timed out.
             authenticate-first=Authenticate before doing that.
             limbo-missing=OpenGate requires the configured Velocity limbo server.

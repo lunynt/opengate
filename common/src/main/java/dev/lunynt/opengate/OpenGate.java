@@ -2,6 +2,7 @@ package dev.lunynt.opengate;
 
 import dev.lunynt.opengate.account.AccountService;
 import dev.lunynt.opengate.account.SqliteAccountRepository;
+import dev.lunynt.opengate.account.LoginRateLimiter;
 import dev.lunynt.opengate.auth.SessionRegistry;
 import dev.lunynt.opengate.crypto.Argon2idPasswordHasher;
 import dev.lunynt.opengate.crypto.SecretCipher;
@@ -57,7 +58,8 @@ public final class OpenGate implements AutoCloseable {
                 cryptoExecutor,
                 clock,
                 config.minimumPasswordLength(),
-                config.maximumPasswordLength());
+                config.maximumPasswordLength(),
+                new LoginRateLimiter(config.maximumIpFailures(), config.ipFailureWindow(), clock));
         var profiles = new MojangProfileLookup(config.premiumLookupTimeout());
         return new OpenGate(
                 new SessionRegistry(clock),

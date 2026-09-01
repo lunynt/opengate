@@ -29,7 +29,8 @@ class AccountServiceTest {
                 Executors.newSingleThreadExecutor(),
                 clock,
                 8,
-                128)) {
+                128,
+                new LoginRateLimiter(10, Duration.ofMinutes(10), clock))) {
             var playerId = UUID.randomUUID();
             var password = "correct horse battery staple".toCharArray();
             var account = service.register(playerId, "Player", IdentityType.OFFLINE, password, "127.0.0.1").join();

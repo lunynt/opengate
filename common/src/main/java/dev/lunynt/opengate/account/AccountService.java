@@ -18,6 +18,7 @@ public final class AccountService implements AutoCloseable {
     private final Clock clock;
     private final int minimumPasswordLength;
     private final int maximumPasswordLength;
+    private final LoginRateLimiter loginRateLimiter;
 
     public AccountService(
             AccountRepository accounts,
@@ -25,13 +26,15 @@ public final class AccountService implements AutoCloseable {
             ExecutorService cryptoExecutor,
             Clock clock,
             int minimumPasswordLength,
-            int maximumPasswordLength) {
+            int maximumPasswordLength,
+            LoginRateLimiter loginRateLimiter) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.passwords = Objects.requireNonNull(passwords, "passwords");
         this.cryptoExecutor = Objects.requireNonNull(cryptoExecutor, "cryptoExecutor");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.minimumPasswordLength = minimumPasswordLength;
         this.maximumPasswordLength = maximumPasswordLength;
+        this.loginRateLimiter = Objects.requireNonNull(loginRateLimiter, "loginRateLimiter");
     }
 
     public CompletableFuture<Account> register(
@@ -69,13 +72,18 @@ public final class AccountService implements AutoCloseable {
         return CompletableFuture.supplyAsync(
                 () -> {
                     try {
+                        if (loginRateLimiter.isBlocked(address)) {
+                            return AuthenticationResult.RATE_LIMITED;
+                        }
                         var account = accounts.findByPlayerId(playerId);
                         if (account.isEmpty() || account.orElseThrow().passwordHash() == null) {
                             return AuthenticationResult.ACCOUNT_NOT_FOUND;
                         }
                         if (!passwords.verify(ownedPassword, account.orElseThrow().passwordHash())) {
+                            loginRateLimiter.recordFailure(address);
                             return AuthenticationResult.WRONG_PASSWORD;
                         }
+                        loginRateLimiter.clear(address);
                         accounts.save(account.orElseThrow().authenticatedAt(clock.instant(), address));
                         return AuthenticationResult.SUCCESS;
                     } finally {

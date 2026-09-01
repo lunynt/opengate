@@ -3,6 +3,7 @@ package dev.lunynt.opengate.velocity;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import dev.lunynt.opengate.account.AuthenticationResult;
+import dev.lunynt.opengate.account.AccountActionResult;
 import dev.lunynt.opengate.auth.AuthenticationState;
 import dev.lunynt.opengate.auth.IdentityType;
 import java.util.Arrays;
@@ -13,7 +14,8 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
         LOGIN,
         REGISTER,
         TOTP,
-        MANAGE_TOTP
+        MANAGE_TOTP,
+        ACCOUNT
     }
 
     private final OpenGateVelocityPlugin plugin;
@@ -35,6 +37,7 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
             case LOGIN -> login(player, invocation.arguments());
             case TOTP -> totp(player, invocation.arguments());
             case MANAGE_TOTP -> manageTotp(player, invocation.arguments());
+            case ACCOUNT -> manageAccount(player, invocation.arguments());
         }
     }
 
@@ -181,6 +184,76 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
         return plugin.openGate().sessions().find(player.getUniqueId())
                 .map(session -> session.state() == AuthenticationState.RELEASED)
                 .orElse(false);
+    }
+
+    private void manageAccount(Player player, String[] arguments) {
+        if (!isReleased(player) || arguments.length == 0) {
+            player.sendMessage(Component.text("Usage: /account password <current> <new> | logout | delete <password> confirm"));
+            return;
+        }
+        switch (arguments[0].toLowerCase(java.util.Locale.ROOT)) {
+            case "password" -> changePassword(player, arguments);
+            case "logout" -> {
+                plugin.openGate().accounts().revokeTrustedSession(player.getUniqueId());
+                plugin.openGate().sessions().close(player.getUniqueId());
+                player.disconnect(message("logged-out"));
+            }
+            case "delete" -> deleteAccount(player, arguments);
+            default -> player.sendMessage(
+                    Component.text("Usage: /account password <current> <new> | logout | delete <password> confirm"));
+        }
+    }
+
+    private void changePassword(Player player, String[] arguments) {
+        if (arguments.length != 3) {
+            player.sendMessage(Component.text("Usage: /account password <current> <new>"));
+            return;
+        }
+        var current = arguments[1].toCharArray();
+        var replacement = arguments[2].toCharArray();
+        try {
+            plugin.openGate().accounts()
+                    .changePassword(player.getUniqueId(), current, replacement, address(player))
+                    .whenComplete((result, error) -> accountCallback(player, result, error, () ->
+                            player.sendMessage(message("password-changed"))));
+        } catch (IllegalArgumentException error) {
+            player.sendMessage(Component.text(error.getMessage()));
+        } finally {
+            Arrays.fill(current, '\0');
+            Arrays.fill(replacement, '\0');
+        }
+    }
+
+    private void deleteAccount(Player player, String[] arguments) {
+        if (arguments.length != 3 || !arguments[2].equalsIgnoreCase("confirm")) {
+            player.sendMessage(Component.text("Usage: /account delete <password> confirm"));
+            return;
+        }
+        var password = arguments[1].toCharArray();
+        plugin.openGate().accounts().delete(player.getUniqueId(), password, address(player))
+                .whenComplete((result, error) -> accountCallback(player, result, error, () -> {
+                    plugin.openGate().sessions().close(player.getUniqueId());
+                    player.disconnect(message("account-deleted"));
+                }));
+        Arrays.fill(password, '\0');
+    }
+
+    private void accountCallback(
+            Player player, AccountActionResult result, Throwable error, Runnable success) {
+        if (!player.isActive()) return;
+        if (error != null || result != AccountActionResult.SUCCESS) {
+            if (result == AccountActionResult.RATE_LIMITED) {
+                player.disconnect(message("rate-limited"));
+            } else {
+                player.sendMessage(message("account-action-failed"));
+            }
+            return;
+        }
+        success.run();
+    }
+
+    private static String address(Player player) {
+        return player.getRemoteAddress().getAddress().getHostAddress();
     }
 
     private static String rootMessage(Throwable error) {

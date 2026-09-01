@@ -18,3 +18,6 @@ commands:
   2fa:
     description: Manage two-factor authentication
     usage: /2fa <setup|confirm|disable>
+  account:
+    description: Manage your OpenGate account
+    usage: /account <password|logout|delete>

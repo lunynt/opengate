@@ -8,6 +8,7 @@ import dev.lunynt.opengate.config.OpenGateConfig;
 import dev.lunynt.opengate.config.OpenGateMessages;
 import dev.lunynt.opengate.identity.MojangProfileLookup;
 import dev.lunynt.opengate.identity.ProfileLookup;
+import dev.lunynt.opengate.identity.IdentityResolver;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.concurrent.Executors;
@@ -18,18 +19,21 @@ public final class OpenGate implements AutoCloseable {
     private final OpenGateConfig config;
     private final OpenGateMessages messages;
     private final ProfileLookup profiles;
+    private final IdentityResolver identities;
 
     private OpenGate(
             SessionRegistry sessions,
             AccountService accounts,
             OpenGateConfig config,
             OpenGateMessages messages,
-            ProfileLookup profiles) {
+            ProfileLookup profiles,
+            IdentityResolver identities) {
         this.sessions = sessions;
         this.accounts = accounts;
         this.config = config;
         this.messages = messages;
         this.profiles = profiles;
+        this.identities = identities;
     }
 
     public static OpenGate create(Path dataDirectory) {
@@ -47,12 +51,14 @@ public final class OpenGate implements AutoCloseable {
                 clock,
                 config.minimumPasswordLength(),
                 config.maximumPasswordLength());
+        var profiles = new MojangProfileLookup(config.premiumLookupTimeout());
         return new OpenGate(
                 new SessionRegistry(clock),
                 accounts,
                 config,
                 messages,
-                new MojangProfileLookup(config.premiumLookupTimeout()));
+                profiles,
+                new IdentityResolver(repository, profiles, config.premiumLookupEnabled()));
     }
 
     public SessionRegistry sessions() {
@@ -73,6 +79,10 @@ public final class OpenGate implements AutoCloseable {
 
     public ProfileLookup profiles() {
         return profiles;
+    }
+
+    public IdentityResolver identities() {
+        return identities;
     }
 
     @Override

@@ -1,9 +1,11 @@
 package dev.lunynt.opengate.velocity;
 
 import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.PostOrder;
 import com.velocitypowered.api.event.command.CommandExecuteEvent;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
+import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import dev.lunynt.opengate.auth.AuthenticationState;
 import dev.lunynt.opengate.auth.IdentityType;
@@ -19,6 +21,23 @@ final class VelocityAuthenticationListener {
 
     VelocityAuthenticationListener(OpenGateVelocityPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    @Subscribe(order = PostOrder.LAST)
+    public void onPreLogin(PreLoginEvent event) {
+        if (!event.getResult().isAllowed()) {
+            return;
+        }
+        var decision = plugin.openGate().identities().resolve(event.getUsername());
+        event.setResult(switch (decision) {
+            case ONLINE -> PreLoginEvent.PreLoginComponentResult.forceOnlineMode();
+            case OFFLINE -> PreLoginEvent.PreLoginComponentResult.forceOfflineMode();
+            case DENY_INVALID_USERNAME -> PreLoginEvent.PreLoginComponentResult.denied(message("invalid-username"));
+            case DENY_CASE_MISMATCH ->
+                    PreLoginEvent.PreLoginComponentResult.denied(message("username-case-mismatch"));
+            case DENY_LOOKUP_UNAVAILABLE ->
+                    PreLoginEvent.PreLoginComponentResult.denied(message("profile-lookup-unavailable"));
+        });
     }
 
     @Subscribe

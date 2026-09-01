@@ -17,6 +17,7 @@ public final class OpenGateMessages {
             authenticate-first=Authenticate before doing that.
             limbo-missing=OpenGate requires the configured Velocity limbo server.
             invalid-username=Username must contain 3-16 letters, numbers, or underscores.
+            username-case-mismatch=Use the exact capitalization registered for this username.
             profile-lookup-unavailable=Could not verify account ownership. Try again shortly.
             """;
 

@@ -1,0 +1,14 @@
+name: OpenGate
+version: '0.1.0-SNAPSHOT'
+main: dev.lunynt.opengate.paper.OpenGatePaperPlugin
+description: Authentication gateway for Paper and Velocity
+api-version: '26.2'
+commands:
+  login:
+    description: Authenticate with your password
+    usage: /login <password>
+    aliases: [l]
+  register:
+    description: Register an OpenGate account
+    usage: /register <password> <password>
+    aliases: [reg]

@@ -1,5 +1,7 @@
 package dev.lunynt.opengate.account;
 
+import dev.lunynt.opengate.audit.AuditEventType;
+import dev.lunynt.opengate.audit.AuditLog;
 import dev.lunynt.opengate.auth.IdentityType;
 import dev.lunynt.opengate.crypto.PasswordHasher;
 import java.time.Clock;
@@ -19,6 +21,7 @@ public final class AccountService implements AutoCloseable {
     private final int minimumPasswordLength;
     private final int maximumPasswordLength;
     private final LoginRateLimiter loginRateLimiter;
+    private final AuditLog auditLog;
 
     public AccountService(
             AccountRepository accounts,
@@ -27,7 +30,8 @@ public final class AccountService implements AutoCloseable {
             Clock clock,
             int minimumPasswordLength,
             int maximumPasswordLength,
-            LoginRateLimiter loginRateLimiter) {
+            LoginRateLimiter loginRateLimiter,
+            AuditLog auditLog) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.passwords = Objects.requireNonNull(passwords, "passwords");
         this.cryptoExecutor = Objects.requireNonNull(cryptoExecutor, "cryptoExecutor");
@@ -35,6 +39,7 @@ public final class AccountService implements AutoCloseable {
         this.minimumPasswordLength = minimumPasswordLength;
         this.maximumPasswordLength = maximumPasswordLength;
         this.loginRateLimiter = Objects.requireNonNull(loginRateLimiter, "loginRateLimiter");
+        this.auditLog = Objects.requireNonNull(auditLog, "auditLog");
     }
 
     public CompletableFuture<Account> register(
@@ -58,6 +63,12 @@ public final class AccountService implements AutoCloseable {
                                 now,
                                 address);
                         accounts.save(account);
+                        auditLog.record(
+                                AuditEventType.REGISTRATION,
+                                account.playerId(),
+                                account.username(),
+                                address,
+                                account.identityType().name());
                         return account;
                     } finally {
                         Arrays.fill(ownedPassword, '\0');
@@ -73,6 +84,7 @@ public final class AccountService implements AutoCloseable {
                 () -> {
                     try {
                         if (loginRateLimiter.isBlocked(address)) {
+                            auditLog.record(AuditEventType.LOGIN_RATE_LIMITED, playerId, null, address, null);
                             return AuthenticationResult.RATE_LIMITED;
                         }
                         var account = accounts.findByPlayerId(playerId);
@@ -81,10 +93,22 @@ public final class AccountService implements AutoCloseable {
                         }
                         if (!passwords.verify(ownedPassword, account.orElseThrow().passwordHash())) {
                             loginRateLimiter.recordFailure(address);
+                            auditLog.record(
+                                    AuditEventType.LOGIN_FAILURE,
+                                    playerId,
+                                    account.orElseThrow().username(),
+                                    address,
+                                    null);
                             return AuthenticationResult.WRONG_PASSWORD;
                         }
                         loginRateLimiter.clear(address);
                         accounts.save(account.orElseThrow().authenticatedAt(clock.instant(), address));
+                        auditLog.record(
+                                AuditEventType.LOGIN_SUCCESS,
+                                playerId,
+                                account.orElseThrow().username(),
+                                address,
+                                null);
                         return AuthenticationResult.SUCCESS;
                     } finally {
                         Arrays.fill(ownedPassword, '\0');
@@ -111,7 +135,15 @@ public final class AccountService implements AutoCloseable {
     }
 
     public void revokeTrustedSession(UUID playerId) {
-        accounts.findByPlayerId(playerId).ifPresent(account -> accounts.save(account.withoutTrustedSession()));
+        accounts.findByPlayerId(playerId).ifPresent(account -> {
+            accounts.save(account.withoutTrustedSession());
+            auditLog.record(
+                    AuditEventType.SESSION_REVOKED,
+                    playerId,
+                    account.username(),
+                    null,
+                    null);
+        });
     }
 
     private CompletableFuture<AccountActionResult> authenticatedAction(
@@ -144,6 +176,14 @@ public final class AccountService implements AutoCloseable {
                             .withPasswordHash(passwords.hash(replacement))
                             .authenticatedAt(clock.instant(), address));
                 }
+                auditLog.record(
+                        ownedAdditional.length == 0
+                                ? AuditEventType.ACCOUNT_DELETED
+                                : AuditEventType.PASSWORD_CHANGED,
+                        playerId,
+                        account.orElseThrow().username(),
+                        address,
+                        null);
                 return AccountActionResult.SUCCESS;
             } finally {
                 Arrays.fill(ownedPassword, '\0');

@@ -46,3 +46,5 @@ Authenticated players can manage their account with:
 Password changes and deletion run Argon2id verification outside the server thread. Logout revokes the persisted trusted session, while deletion removes the account and immediately closes the active authentication session.
 
 On first launch OpenGate creates `config.properties` and `messages.properties`. Authentication timing, password bounds, IP limits, premium lookup, limbo routing, lobby order, and player messages can be changed without rebuilding the plugin.
+
+The SQLite schema is versioned and upgraded transactionally. Security events are written to `audit_events`, including logins, failures, rate limits, registration, password changes, session revocation, account deletion, and TOTP changes. Client addresses are stored only as keyed HMAC-SHA256 fingerprints, allowing correlation without retaining raw IP addresses.

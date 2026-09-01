@@ -1,6 +1,7 @@
 package dev.lunynt.opengate.account;
 
 import dev.lunynt.opengate.auth.IdentityType;
+import dev.lunynt.opengate.database.SqliteSchema;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -22,29 +23,7 @@ public final class SqliteAccountRepository implements AccountRepository {
 
     public SqliteAccountRepository(Path databaseFile) {
         jdbcUrl = "jdbc:sqlite:" + databaseFile.toAbsolutePath();
-        initialize();
-    }
-
-    private void initialize() {
-        try (var connection = connection(); var statement = connection.createStatement()) {
-            statement.execute("PRAGMA journal_mode=WAL");
-            statement.execute("PRAGMA foreign_keys=ON");
-            statement.executeUpdate("""
-                    CREATE TABLE IF NOT EXISTS accounts (
-                        player_id TEXT PRIMARY KEY NOT NULL,
-                        username TEXT NOT NULL,
-                        normalized_username TEXT UNIQUE NOT NULL,
-                        identity_type TEXT NOT NULL,
-                        password_hash TEXT,
-                        totp_secret TEXT,
-                        created_at INTEGER NOT NULL,
-                        last_authenticated_at INTEGER,
-                        last_address TEXT
-                    )
-                    """);
-        } catch (SQLException exception) {
-            throw new IllegalStateException("could not initialize OpenGate database", exception);
-        }
+        SqliteSchema.migrate(databaseFile);
     }
 
     @Override

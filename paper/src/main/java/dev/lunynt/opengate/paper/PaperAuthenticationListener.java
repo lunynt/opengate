@@ -36,13 +36,39 @@ final class PaperAuthenticationListener implements Listener {
         var address = player.getAddress() == null ? "unknown" : player.getAddress().getAddress().getHostAddress();
         plugin.openGate().sessions().close(playerId);
         var session = plugin.openGate().sessions().open(playerId);
-        var account = plugin.openGate().accounts().find(playerId);
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                var account = plugin.openGate().accounts().find(playerId);
+                var trusted = account.filter(value -> plugin.openGate()
+                                .accounts()
+                                .hasTrustedSession(
+                                        value, address, plugin.openGate().config().trustedSessionLifetime()))
+                        .isPresent();
+                plugin.getServer().getScheduler().runTask(plugin, () -> finishJoin(
+                        player,
+                        session,
+                        account,
+                        trusted,
+                        plugin.getServer().getOnlineMode() ? IdentityType.PREMIUM : IdentityType.OFFLINE));
+            } catch (RuntimeException exception) {
+                plugin.getLogger().severe("Could not load account for " + player.getName() + ": " + exception.getMessage());
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    if (isCurrent(player, session)) player.kick(message("profile-lookup-unavailable"));
+                });
+            }
+        });
+        scheduleTimeout(player, playerId);
+    }
+
+    private void finishJoin(
+            org.bukkit.entity.Player player,
+            dev.lunynt.opengate.auth.AuthenticationSession session,
+            java.util.Optional<dev.lunynt.opengate.account.Account> account,
+            boolean trusted,
+            IdentityType identityType) {
+        if (!isCurrent(player, session)) return;
+        var playerId = player.getUniqueId();
         var registered = account.isPresent();
-        var trusted = account.filter(value -> plugin.openGate()
-                        .accounts()
-                        .hasTrustedSession(value, address, plugin.openGate().config().trustedSessionLifetime()))
-                .isPresent();
-        var identityType = plugin.getServer().getOnlineMode() ? IdentityType.PREMIUM : IdentityType.OFFLINE;
         session.resolve(new ResolvedIdentity(
                 player.getName(),
                 playerId,
@@ -60,11 +86,20 @@ final class PaperAuthenticationListener implements Listener {
         } else {
             player.sendMessage(message("login-prompt"));
         }
+    }
+
+    private void scheduleTimeout(org.bukkit.entity.Player player, java.util.UUID playerId) {
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             if (player.isOnline() && isBlocked(playerId)) {
                 player.kick(message("authentication-timeout"));
             }
         }, plugin.openGate().config().authenticationTimeout().toSeconds() * 20L);
+    }
+
+    private boolean isCurrent(
+            org.bukkit.entity.Player player, dev.lunynt.opengate.auth.AuthenticationSession session) {
+        return player.isOnline()
+                && plugin.openGate().sessions().find(player.getUniqueId()).orElse(null) == session;
     }
 
     @EventHandler

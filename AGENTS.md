@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This is a Java 25 Gradle multi-module project. Put platform-neutral logic in `common/`, Velocity integration in `velocity/`, and Paper integration in `paper/`. Each module uses the standard `src/main/java`, `src/main/resources`, and `src/test/java` layout. Organize packages by feature or responsibility rather than generic buckets.
+This is a Java 25 Gradle multi-module project. Put platform-neutral logic in `common/`, Velocity integration in `velocity/`, BungeeCord integration in `bungee/`, and Paper integration in `paper/`. Each module uses the standard `src/main/java`, `src/main/resources`, and `src/test/java` layout. Organize packages by feature or responsibility rather than generic buckets.
 
 The `inspo/NavAuth-main/`, `inspo/LibreLogin-master/`, and `inspo/LibreLoginProd-master/` trees are reference implementations. Consult them for authentication flows, platform integration, configuration, and migration behavior, but do not edit or depend directly on their source unless a task explicitly requires it. Reimplement only the concepts needed by this project and respect upstream licenses.
 
@@ -16,6 +16,7 @@ Use the checked-in Gradle wrapper so every environment uses the same Gradle vers
 ./gradlew clean build    # verify a build from a clean workspace
 ./gradlew :paper:build   # create the Paper plugin JAR
 ./gradlew :velocity:build # create the Velocity plugin JAR
+./gradlew :bungee:build  # create the BungeeCord plugin JAR
 ```
 
 Target one test with `./gradlew test --tests 'package.ClassName'`. Do not commit generated files from `build/` or `.gradle/`.

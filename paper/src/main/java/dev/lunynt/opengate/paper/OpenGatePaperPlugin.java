@@ -1,8 +1,6 @@
 package dev.lunynt.opengate.paper;
 
 import dev.lunynt.opengate.OpenGate;
-import java.io.IOException;
-import java.nio.file.Files;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class OpenGatePaperPlugin extends JavaPlugin {
@@ -10,11 +8,6 @@ public final class OpenGatePaperPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        try {
-            Files.createDirectories(getDataFolder().toPath());
-        } catch (IOException exception) {
-            throw new IllegalStateException("could not create OpenGate data directory", exception);
-        }
         openGate = OpenGate.create(getDataFolder().toPath());
         getServer().getPluginManager().registerEvents(new PaperAuthenticationListener(this), this);
         var commands = new PaperAuthenticationCommand(this);

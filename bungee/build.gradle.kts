@@ -3,6 +3,10 @@ dependencies {
     compileOnly("net.md-5:bungeecord-api:1.21-R0.5-SNAPSHOT")
 }
 
+base {
+    archivesName.set("opengate-bungee")
+}
+
 tasks.jar {
     dependsOn(":common:jar")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE

@@ -1,12 +1,13 @@
 # OpenGate
 
-OpenGate is a small authentication gateway for modern Minecraft servers. A single Java 25 core powers standalone Paper, Velocity, and BungeeCord adapters.
+OpenGate is a small authentication gateway for modern Minecraft servers. A single Java 25 core powers Bukkit, Spigot, Paper, Velocity, and BungeeCord adapters.
 
 
 ## Platforms
 
 - Velocity 4
 - BungeeCord 1.21
+- Bukkit and Spigot 26.2
 - Paper 26.2
 
 ## Design
@@ -23,15 +24,15 @@ Requires Java 25. Build and test every module with:
 ./gradlew clean build
 ```
 
-Platform JARs are written to `paper/build/libs/`, `velocity/build/libs/`, and `bungee/build/libs/`.
+Platform JARs are written to `bukkit/build/libs/`, `paper/build/libs/`, `velocity/build/libs/`, and `bungee/build/libs/`. Use `opengate-<platform>-<version>.jar`, not a `-sources.jar`.
 
-## Standalone Paper install
+## Standalone Bukkit, Spigot, or Paper install
 
-1. Copy the Paper JAR into `plugins/` and restart.
+1. Copy the JAR matching your server into `plugins/` and restart.
 2. Keep `online-mode=true` for premium-only servers. Use `online-mode=false` only when offline players must register.
 3. Edit `plugins/OpenGate/config.properties`, then restart to apply changes.
 
-Install OpenGate only on Paper in this mode.
+Install OpenGate only on the game server in this mode.
 
 ## Proxy network install
 

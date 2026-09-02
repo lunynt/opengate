@@ -6,6 +6,7 @@ import dev.lunynt.opengate.account.LoginRateLimiter;
 import dev.lunynt.opengate.audit.AddressFingerprint;
 import dev.lunynt.opengate.audit.AuditLog;
 import dev.lunynt.opengate.audit.SqliteAuditLog;
+import dev.lunynt.opengate.admin.AdminService;
 import dev.lunynt.opengate.auth.SessionRegistry;
 import dev.lunynt.opengate.crypto.Argon2idPasswordHasher;
 import dev.lunynt.opengate.crypto.SecretCipher;
@@ -30,6 +31,7 @@ public final class OpenGate implements AutoCloseable {
     private final IdentityResolver identities;
     private final TotpEnrollmentService totp;
     private final AuditLog auditLog;
+    private final AdminService adminService;
 
     private OpenGate(
             SessionRegistry sessions,
@@ -39,7 +41,8 @@ public final class OpenGate implements AutoCloseable {
             ProfileLookup profiles,
             IdentityResolver identities,
             TotpEnrollmentService totp,
-            AuditLog auditLog) {
+            AuditLog auditLog,
+            AdminService adminService) {
         this.sessions = sessions;
         this.accounts = accounts;
         this.config = config;
@@ -48,6 +51,7 @@ public final class OpenGate implements AutoCloseable {
         this.identities = identities;
         this.totp = totp;
         this.auditLog = auditLog;
+        this.adminService = adminService;
     }
 
     public static OpenGate create(Path dataDirectory) {
@@ -71,8 +75,9 @@ public final class OpenGate implements AutoCloseable {
                 new LoginRateLimiter(config.maximumIpFailures(), config.ipFailureWindow(), clock),
                 auditLog);
         var profiles = new MojangProfileLookup(config.premiumLookupTimeout());
+        var sessions = new SessionRegistry(clock);
         return new OpenGate(
-                new SessionRegistry(clock),
+                sessions,
                 accounts,
                 config,
                 messages,
@@ -84,7 +89,8 @@ public final class OpenGate implements AutoCloseable {
                         new SecretCipher(secretKey),
                         clock,
                         auditLog),
-                auditLog);
+                auditLog,
+                new AdminService(accounts, sessions, auditLog));
     }
 
     public SessionRegistry sessions() {
@@ -117,6 +123,10 @@ public final class OpenGate implements AutoCloseable {
 
     public AuditLog auditLog() {
         return auditLog;
+    }
+
+    public AdminService admin() {
+        return adminService;
     }
 
     @Override

@@ -15,7 +15,7 @@ import java.util.UUID;
 public final class SqliteAccountRepository implements AccountRepository {
     private static final String SELECT_COLUMNS = """
             SELECT player_id, username, identity_type, password_hash, totp_secret,
-                   created_at, last_authenticated_at, last_address
+                   created_at, last_authenticated_at, last_address_fingerprint
             FROM accounts
             """;
 
@@ -52,7 +52,7 @@ public final class SqliteAccountRepository implements AccountRepository {
         var sql = """
                 INSERT INTO accounts (
                     player_id, username, normalized_username, identity_type, password_hash,
-                    totp_secret, created_at, last_authenticated_at, last_address
+                    totp_secret, created_at, last_authenticated_at, last_address_fingerprint
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(player_id) DO UPDATE SET
                     username = excluded.username,
@@ -61,7 +61,7 @@ public final class SqliteAccountRepository implements AccountRepository {
                     password_hash = excluded.password_hash,
                     totp_secret = excluded.totp_secret,
                     last_authenticated_at = excluded.last_authenticated_at,
-                    last_address = excluded.last_address
+                    last_address_fingerprint = excluded.last_address_fingerprint
                 """;
         try (var connection = connection(); var statement = connection.prepareStatement(sql)) {
             statement.setString(1, account.playerId().toString());
@@ -72,7 +72,7 @@ public final class SqliteAccountRepository implements AccountRepository {
             statement.setString(6, account.totpSecret());
             statement.setLong(7, account.createdAt().toEpochMilli());
             setInstant(statement, 8, account.lastAuthenticatedAt());
-            statement.setString(9, account.lastAddress());
+            statement.setString(9, account.lastAddressFingerprint());
             statement.executeUpdate();
         } catch (SQLException exception) {
             if (exception.getMessage() != null && exception.getMessage().contains("UNIQUE constraint failed")) {
@@ -106,7 +106,7 @@ public final class SqliteAccountRepository implements AccountRepository {
                 results.getString("totp_secret"),
                 Instant.ofEpochMilli(results.getLong("created_at")),
                 nullableInstant(results, "last_authenticated_at"),
-                results.getString("last_address"));
+                results.getString("last_address_fingerprint"));
     }
 
     private static Instant nullableInstant(ResultSet results, String column) throws SQLException {

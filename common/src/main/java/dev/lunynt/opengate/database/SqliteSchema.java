@@ -6,7 +6,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 public final class SqliteSchema {
-    public static final int CURRENT_VERSION = 2;
+    public static final int CURRENT_VERSION = 3;
 
     private SqliteSchema() {}
 
@@ -23,6 +23,7 @@ public final class SqliteSchema {
                 }
                 if (version < 1) migrateToVersion1(connection);
                 if (version < 2) migrateToVersion2(connection);
+                if (version < 3) migrateToVersion3(connection);
                 connection.commit();
             } catch (Exception exception) {
                 connection.rollback();
@@ -87,6 +88,14 @@ public final class SqliteSchema {
             statement.executeUpdate(
                     "CREATE INDEX IF NOT EXISTS audit_events_type_time ON audit_events(event_type, occurred_at)");
             statement.execute("PRAGMA user_version=2");
+        }
+    }
+
+    private static void migrateToVersion3(Connection connection) throws SQLException {
+        try (var statement = connection.createStatement()) {
+            statement.executeUpdate("ALTER TABLE accounts RENAME COLUMN last_address TO last_address_fingerprint");
+            statement.executeUpdate("UPDATE accounts SET last_address_fingerprint = NULL");
+            statement.execute("PRAGMA user_version=3");
         }
     }
 }

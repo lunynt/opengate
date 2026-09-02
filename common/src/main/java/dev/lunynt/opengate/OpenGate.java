@@ -61,7 +61,8 @@ public final class OpenGate implements AutoCloseable {
         var databaseFile = dataDirectory.resolve("opengate.db");
         var repository = new SqliteAccountRepository(databaseFile);
         var secretKey = SecretKeyFile.loadOrCreate(dataDirectory.resolve("secret.key"));
-        var auditLog = new SqliteAuditLog(databaseFile, clock, new AddressFingerprint(secretKey));
+        var addressFingerprint = new AddressFingerprint(secretKey);
+        var auditLog = new SqliteAuditLog(databaseFile, clock, addressFingerprint);
         var cryptoExecutor = Executors.newFixedThreadPool(2, Thread.ofPlatform()
                 .name("opengate-crypto-", 0)
                 .factory());
@@ -73,7 +74,8 @@ public final class OpenGate implements AutoCloseable {
                 config.minimumPasswordLength(),
                 config.maximumPasswordLength(),
                 new LoginRateLimiter(config.maximumIpFailures(), config.ipFailureWindow(), clock),
-                auditLog);
+                auditLog,
+                addressFingerprint);
         var profiles = new MojangProfileLookup(config.premiumLookupTimeout());
         var sessions = new SessionRegistry(clock);
         return new OpenGate(

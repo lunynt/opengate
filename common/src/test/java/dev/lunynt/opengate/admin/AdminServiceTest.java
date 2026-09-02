@@ -10,6 +10,7 @@ import dev.lunynt.opengate.account.LoginRateLimiter;
 import dev.lunynt.opengate.audit.AuditEventType;
 import dev.lunynt.opengate.audit.AuditLog;
 import dev.lunynt.opengate.audit.AuditRecord;
+import dev.lunynt.opengate.audit.AddressFingerprint;
 import dev.lunynt.opengate.auth.IdentityType;
 import dev.lunynt.opengate.auth.SessionRegistry;
 import dev.lunynt.opengate.crypto.PasswordHasher;
@@ -23,6 +24,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executors;
+import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 
 class AdminServiceTest {
@@ -41,7 +43,8 @@ class AdminServiceTest {
                 8,
                 128,
                 new LoginRateLimiter(10, Duration.ofMinutes(10), clock),
-                audit)) {
+                audit,
+                new AddressFingerprint(new SecretKeySpec(new byte[32], "AES")))) {
             var admin = new AdminService(accounts, new SessionRegistry(clock), audit);
 
             assertTrue(admin.lookup("player", "console").isPresent());

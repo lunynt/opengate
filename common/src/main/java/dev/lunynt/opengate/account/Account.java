@@ -15,7 +15,7 @@ public record Account(
         String totpSecret,
         Instant createdAt,
         Instant lastAuthenticatedAt,
-        String lastAddress) {
+        String lastAddressFingerprint) {
 
     public Account {
         Objects.requireNonNull(playerId, "playerId");
@@ -39,7 +39,7 @@ public record Account(
         return Optional.ofNullable(totpSecret);
     }
 
-    public Account authenticatedAt(Instant instant, String address) {
+    public Account authenticatedAt(Instant instant, String addressFingerprint) {
         return new Account(
                 playerId,
                 username,
@@ -48,7 +48,7 @@ public record Account(
                 totpSecret,
                 createdAt,
                 Objects.requireNonNull(instant, "instant"),
-                Objects.requireNonNull(address, "address"));
+                Objects.requireNonNull(addressFingerprint, "addressFingerprint"));
     }
 
     public Account withTotpSecret(String encryptedSecret) {
@@ -60,7 +60,7 @@ public record Account(
                 encryptedSecret,
                 createdAt,
                 lastAuthenticatedAt,
-                lastAddress);
+                lastAddressFingerprint);
     }
 
     public Account withPasswordHash(String newPasswordHash) {
@@ -72,7 +72,7 @@ public record Account(
                 totpSecret,
                 createdAt,
                 lastAuthenticatedAt,
-                lastAddress);
+                lastAddressFingerprint);
     }
 
     public Account withoutTrustedSession() {

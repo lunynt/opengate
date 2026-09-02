@@ -2,6 +2,7 @@ package dev.lunynt.opengate.account;
 
 import dev.lunynt.opengate.audit.AuditEventType;
 import dev.lunynt.opengate.audit.AuditLog;
+import dev.lunynt.opengate.audit.AddressFingerprint;
 import dev.lunynt.opengate.auth.IdentityType;
 import dev.lunynt.opengate.crypto.PasswordHasher;
 import java.time.Clock;
@@ -22,6 +23,7 @@ public final class AccountService implements AutoCloseable {
     private final int maximumPasswordLength;
     private final LoginRateLimiter loginRateLimiter;
     private final AuditLog auditLog;
+    private final AddressFingerprint addressFingerprint;
 
     public AccountService(
             AccountRepository accounts,
@@ -31,7 +33,8 @@ public final class AccountService implements AutoCloseable {
             int minimumPasswordLength,
             int maximumPasswordLength,
             LoginRateLimiter loginRateLimiter,
-            AuditLog auditLog) {
+            AuditLog auditLog,
+            AddressFingerprint addressFingerprint) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.passwords = Objects.requireNonNull(passwords, "passwords");
         this.cryptoExecutor = Objects.requireNonNull(cryptoExecutor, "cryptoExecutor");
@@ -40,6 +43,7 @@ public final class AccountService implements AutoCloseable {
         this.maximumPasswordLength = maximumPasswordLength;
         this.loginRateLimiter = Objects.requireNonNull(loginRateLimiter, "loginRateLimiter");
         this.auditLog = Objects.requireNonNull(auditLog, "auditLog");
+        this.addressFingerprint = Objects.requireNonNull(addressFingerprint, "addressFingerprint");
     }
 
     public CompletableFuture<Account> register(
@@ -61,7 +65,7 @@ public final class AccountService implements AutoCloseable {
                                 null,
                                 now,
                                 now,
-                                address);
+                                addressFingerprint.create(address));
                         accounts.save(account);
                         auditLog.record(
                                 AuditEventType.REGISTRATION,
@@ -102,7 +106,8 @@ public final class AccountService implements AutoCloseable {
                             return AuthenticationResult.WRONG_PASSWORD;
                         }
                         loginRateLimiter.clear(address);
-                        accounts.save(account.orElseThrow().authenticatedAt(clock.instant(), address));
+                        accounts.save(account.orElseThrow()
+                                .authenticatedAt(clock.instant(), addressFingerprint.create(address)));
                         auditLog.record(
                                 AuditEventType.LOGIN_SUCCESS,
                                 playerId,
@@ -129,7 +134,8 @@ public final class AccountService implements AutoCloseable {
             UUID playerId, char[] currentPassword, char[] newPassword, String address) {
         validatePassword(newPassword);
         return authenticatedAction(playerId, currentPassword, address, account -> {
-            accounts.save(account.withPasswordHash(passwords.hash(newPassword)).authenticatedAt(clock.instant(), address));
+            accounts.save(account.withPasswordHash(passwords.hash(newPassword))
+                    .authenticatedAt(clock.instant(), addressFingerprint.create(address)));
         }, newPassword);
     }
 
@@ -178,7 +184,7 @@ public final class AccountService implements AutoCloseable {
                     var replacement = ownedAdditional[0];
                     accounts.save(account.orElseThrow()
                             .withPasswordHash(passwords.hash(replacement))
-                            .authenticatedAt(clock.instant(), address));
+                            .authenticatedAt(clock.instant(), addressFingerprint.create(address)));
                 }
                 auditLog.record(
                         ownedAdditional.length == 0
@@ -197,10 +203,10 @@ public final class AccountService implements AutoCloseable {
     }
 
     public boolean hasTrustedSession(Account account, String address, Duration lifetime) {
-        if (account.lastAuthenticatedAt() == null || account.lastAddress() == null) {
+        if (account.lastAuthenticatedAt() == null || account.lastAddressFingerprint() == null) {
             return false;
         }
-        return account.lastAddress().equals(address)
+        return account.lastAddressFingerprint().equals(addressFingerprint.create(address))
                 && account.lastAuthenticatedAt().plus(lifetime).isAfter(clock.instant());
     }
 

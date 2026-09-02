@@ -21,3 +21,11 @@ commands:
   account:
     description: Manage your OpenGate account
     usage: /account <password|logout|delete>
+  opengate:
+    description: Administer OpenGate accounts
+    usage: /opengate <lookup|audit|revoke>
+    permission: opengate.admin
+permissions:
+  opengate.admin:
+    description: Allows OpenGate account administration
+    default: op

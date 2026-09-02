@@ -121,6 +121,10 @@ public final class AccountService implements AutoCloseable {
         return accounts.findByPlayerId(playerId);
     }
 
+    public Optional<Account> find(String username) {
+        return accounts.findByUsername(username);
+    }
+
     public CompletableFuture<AccountActionResult> changePassword(
             UUID playerId, char[] currentPassword, char[] newPassword, String address) {
         validatePassword(newPassword);

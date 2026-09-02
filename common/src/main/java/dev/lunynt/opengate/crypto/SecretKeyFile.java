@@ -29,7 +29,7 @@ public final class SecretKeyFile {
                             java.nio.file.attribute.PosixFilePermission.OWNER_READ,
                             java.nio.file.attribute.PosixFilePermission.OWNER_WRITE));
                 } catch (UnsupportedOperationException ignored) {
-                    // The host filesystem does not expose POSIX permissions.
+                    // posix permissions are unavailable
                 }
             }
             var decoded = Base64.getDecoder().decode(Files.readString(file).trim());

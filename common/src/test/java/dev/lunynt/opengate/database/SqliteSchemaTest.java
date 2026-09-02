@@ -26,8 +26,11 @@ class SqliteSchemaTest {
                     )
                     """);
             statement.executeUpdate("""
-                    INSERT INTO accounts(player_id, username, normalized_username, identity_type, created_at)
-                    VALUES('00000000-0000-0000-0000-000000000001', 'Player', 'player', 'OFFLINE', 0)
+                    INSERT INTO accounts(
+                        player_id, username, normalized_username, identity_type, created_at, last_address
+                    ) VALUES(
+                        '00000000-0000-0000-0000-000000000001', 'Player', 'player', 'OFFLINE', 0, '203.0.113.42'
+                    )
                     """);
             statement.execute("PRAGMA user_version=1");
         }
@@ -40,6 +43,9 @@ class SqliteSchemaTest {
             }
             try (var accounts = statement.executeQuery("SELECT COUNT(*) FROM accounts")) {
                 assertEquals(1, accounts.getInt(1));
+            }
+            try (var accounts = statement.executeQuery("SELECT last_address_fingerprint FROM accounts")) {
+                assertEquals(null, accounts.getString(1));
             }
             try (var audits = statement.executeQuery("SELECT COUNT(*) FROM audit_events")) {
                 assertEquals(0, audits.getInt(1));

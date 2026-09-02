@@ -16,7 +16,7 @@ public final class OpenGateMessages {
             rate-limited=Too many failed logins from your address. Try again later.
             authentication-timeout=Authentication timed out.
             authenticate-first=Authenticate before doing that.
-            limbo-missing=OpenGate requires the configured Velocity limbo server.
+            limbo-missing=OpenGate requires the configured authentication server.
             invalid-username=Username must contain 3-16 letters, numbers, or underscores.
             username-case-mismatch=Use the exact capitalization registered for this username.
             profile-lookup-unavailable=Could not verify account ownership. Try again shortly.

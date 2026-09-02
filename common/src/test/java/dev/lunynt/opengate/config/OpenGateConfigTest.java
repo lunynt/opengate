@@ -32,4 +32,35 @@ class OpenGateConfigTest {
 
         assertThrows(IllegalArgumentException.class, () -> OpenGateConfig.load(directory));
     }
+
+    @Test
+    void loadsLegacyProxyNames() throws Exception {
+        Files.writeString(directory.resolve("config.properties"), """
+                authentication-timeout-seconds=60
+                trusted-session-hours=6
+                maximum-login-attempts=3
+                maximum-ip-failures=10
+                ip-failure-window-minutes=10
+                minimum-password-length=8
+                maximum-password-length=128
+                premium-lookup-enabled=true
+                premium-lookup-timeout-millis=3000
+                velocity-limbo-server=auth
+                velocity-lobby-servers=survival,creative
+                """);
+
+        var config = OpenGateConfig.load(directory);
+
+        assertEquals("auth", config.limboServer());
+        assertEquals(java.util.List.of("survival", "creative"), config.lobbyServers());
+    }
+
+    @Test
+    void rejectsInvalidBoolean() throws Exception {
+        OpenGateConfig.load(directory);
+        var file = directory.resolve("config.properties");
+        Files.writeString(file, Files.readString(file).replace("premium-lookup-enabled=true", "premium-lookup-enabled=yes"));
+
+        assertThrows(IllegalArgumentException.class, () -> OpenGateConfig.load(directory));
+    }
 }

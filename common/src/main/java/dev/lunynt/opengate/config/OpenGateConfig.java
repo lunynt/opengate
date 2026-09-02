@@ -23,7 +23,7 @@ public record OpenGateConfig(
         List<String> lobbyServers) {
 
     private static final String DEFAULTS = """
-            # OpenGate configuration
+            # opengate
             authentication-timeout-seconds=60
             trusted-session-hours=6
             maximum-login-attempts=3
@@ -33,8 +33,8 @@ public record OpenGateConfig(
             maximum-password-length=128
             premium-lookup-enabled=true
             premium-lookup-timeout-millis=3000
-            velocity-limbo-server=limbo
-            velocity-lobby-servers=lobby
+            proxy-auth-server=limbo
+            proxy-lobby-servers=lobby
             """;
 
     public OpenGateConfig {
@@ -60,9 +60,12 @@ public record OpenGateConfig(
             throw new IllegalArgumentException("premium lookup timeout must be positive");
         }
         if (limboServer.isBlank()) {
-            throw new IllegalArgumentException("Velocity limbo server must not be blank");
+            throw new IllegalArgumentException("proxy authentication server must not be blank");
         }
         lobbyServers = List.copyOf(lobbyServers);
+        if (lobbyServers.isEmpty()) {
+            throw new IllegalArgumentException("at least one proxy lobby server is required");
+        }
     }
 
     public static OpenGateConfig load(Path dataDirectory) {
@@ -77,10 +80,10 @@ public record OpenGateConfig(
                 Duration.ofMinutes(integer(properties, "ip-failure-window-minutes")),
                 integer(properties, "minimum-password-length"),
                 integer(properties, "maximum-password-length"),
-                Boolean.parseBoolean(required(properties, "premium-lookup-enabled")),
+                bool(properties, "premium-lookup-enabled"),
                 Duration.ofMillis(integer(properties, "premium-lookup-timeout-millis")),
-                required(properties, "velocity-limbo-server"),
-                properties.getProperty("velocity-lobby-servers", "lobby").lines()
+                compatible(properties, "proxy-auth-server", "velocity-limbo-server", "limbo"),
+                compatible(properties, "proxy-lobby-servers", "velocity-lobby-servers", "lobby").lines()
                         .flatMap(line -> java.util.Arrays.stream(line.split(",")))
                         .map(String::trim)
                         .filter(value -> !value.isEmpty())
@@ -116,11 +119,23 @@ public record OpenGateConfig(
         }
     }
 
+    private static boolean bool(Properties properties, String key) {
+        return switch (required(properties, key).toLowerCase(java.util.Locale.ROOT)) {
+            case "true" -> true;
+            case "false" -> false;
+            default -> throw new IllegalArgumentException(key + " must be true or false");
+        };
+    }
+
     private static String required(Properties properties, String key) {
         var value = properties.getProperty(key);
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException("missing configuration value: " + key);
         }
         return value.trim();
+    }
+
+    private static String compatible(Properties properties, String key, String legacyKey, String defaultValue) {
+        return properties.getProperty(key, properties.getProperty(legacyKey, defaultValue)).trim();
     }
 }

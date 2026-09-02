@@ -1,7 +1,7 @@
 name: OpenGate
 version: '0.1.0-SNAPSHOT'
 main: dev.lunynt.opengate.paper.OpenGatePaperPlugin
-description: Authentication gateway for Paper and Velocity
+description: Authentication gateway for Paper
 api-version: '26.2'
 commands:
   login:

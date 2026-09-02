@@ -8,8 +8,6 @@ import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import dev.lunynt.opengate.OpenGate;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
@@ -34,11 +32,6 @@ public final class OpenGateVelocityPlugin {
 
     @Subscribe
     public void onProxyInitialize(ProxyInitializeEvent event) {
-        try {
-            Files.createDirectories(dataDirectory);
-        } catch (IOException exception) {
-            throw new IllegalStateException("could not create OpenGate data directory", exception);
-        }
         openGate = OpenGate.create(dataDirectory);
         server.getEventManager().register(this, new VelocityAuthenticationListener(this));
         var commandManager = server.getCommandManager();

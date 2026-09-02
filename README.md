@@ -1,11 +1,12 @@
 # OpenGate
 
-OpenGate is an all-in-one Minecraft authentication plugin focused on security, stability, and a clean architecture. A single Java core powers thin Paper and Velocity adapters.
+OpenGate is a small authentication gateway for modern Minecraft servers. A single Java 25 core powers standalone Paper, Velocity, and BungeeCord adapters.
 
 
 ## Platforms
 
 - Velocity 4
+- BungeeCord 1.21
 - Paper 26.2
 
 ## Design
@@ -22,6 +23,25 @@ Requires Java 25. Build and test every module with:
 ./gradlew clean build
 ```
 
+Platform JARs are written to `paper/build/libs/`, `velocity/build/libs/`, and `bungee/build/libs/`.
+
+## Standalone Paper install
+
+1. Copy the Paper JAR into `plugins/` and restart.
+2. Keep `online-mode=true` for premium-only servers. Use `online-mode=false` only when offline players must register.
+3. Edit `plugins/OpenGate/config.properties`, then restart to apply changes.
+
+Install OpenGate only on Paper in this mode.
+
+## Proxy network install
+
+1. Copy the matching Velocity or BungeeCord JAR into the proxy `plugins/` directory. Do not install OpenGate on backend servers.
+2. Register a lightweight authentication server named `limbo` and at least one destination named `lobby`.
+3. Set the proxy to offline mode so OpenGate can select premium or offline authentication per connection.
+4. Put backends in offline mode and allow connections only from the proxy.
+
+For Velocity, use modern forwarding and the same forwarding secret on every Paper backend. Modern forwarding does not replace a firewall. For BungeeCord, enable IP forwarding and Paper's BungeeCord support; legacy forwarding has no cryptographic protection, so a firewall or localhost binding is mandatory. Follow PaperMC's [forwarding](https://docs.papermc.io/velocity/player-information-forwarding/) and [backend security](https://docs.papermc.io/velocity/security/) guides.
+
 ## Current authentication flow
 
 - Offline players register with `/register <password> <password>` and return with `/login <password>`.
@@ -31,7 +51,7 @@ Requires Java 25. Build and test every module with:
 - Authentication expires after 60 seconds and closes after three incorrect passwords.
 - Reconnects cannot reset brute-force protection: IP addresses are limited to ten failures per rolling ten-minute window by default.
 - Paper blocks movement, chat, commands, inventory actions, interaction, damage, and block changes until authentication.
-- Velocity redirects unauthenticated players to a registered server named `limbo`, then sends them to the first non-limbo server after authentication.
+- Velocity and BungeeCord redirect unauthenticated players to `limbo`, then send them to the first configured lobby after authentication.
 
 Two-factor authentication is available through `/2fa setup <password>`, `/2fa confirm <code>`, `/totp <code>`, and `/2fa disable <password>`. TOTP secrets are encrypted with AES-256-GCM using `plugins/OpenGate/secret.key`; back up this key with the database because losing it makes enrolled TOTP secrets unrecoverable.
 
@@ -45,7 +65,9 @@ Authenticated players can manage their account with:
 
 Password changes and deletion run Argon2id verification outside the server thread. Logout revokes the persisted trusted session, while deletion removes the account and immediately closes the active authentication session.
 
-On first launch OpenGate creates `config.properties` and `messages.properties`. Authentication timing, password bounds, IP limits, premium lookup, limbo routing, lobby order, and player messages can be changed without rebuilding the plugin.
+On first launch OpenGate creates `config.properties`, `messages.properties`, `opengate.db`, and `secret.key`. Authentication timing, password bounds, IP limits, premium lookup, authentication routing, lobby order, and player messages can be changed without rebuilding. Use `proxy-auth-server` and the comma-separated `proxy-lobby-servers` list when server names differ. Older Velocity-specific property names remain compatible.
+
+Standard SQLite JDBC does not include portable database encryption, so OpenGate does not present the database as password-protected. Passwords are one-way Argon2id hashes, TOTP secrets use AES-256-GCM, trusted addresses use keyed HMAC fingerprints, and POSIX storage is restricted to its owner. Back up `opengate.db` and `secret.key` together and keep filesystem access private.
 
 The SQLite schema is versioned and upgraded transactionally. Security events are written to `audit_events`, including logins, failures, rate limits, registration, password changes, session revocation, account deletion, and TOTP changes. Client addresses are stored only as keyed HMAC-SHA256 fingerprints, allowing correlation without retaining raw IP addresses.
 

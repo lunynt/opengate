@@ -4,6 +4,10 @@ dependencies {
     annotationProcessor("com.velocitypowered:velocity-api:4.1.1-SNAPSHOT")
 }
 
+base {
+    archivesName.set("opengate-velocity")
+}
+
 tasks.jar {
     dependsOn(":common:jar")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE

@@ -57,6 +57,9 @@ public final class OpenGateVelocityPlugin {
         commandManager.register(
                 commandManager.metaBuilder("account").plugin(this).build(),
                 new VelocityAuthenticationCommand(this, VelocityAuthenticationCommand.Type.ACCOUNT));
+        commandManager.register(
+                commandManager.metaBuilder("opengate").plugin(this).build(),
+                new VelocityAdminCommand(this));
         logger.info("OpenGate authentication engine enabled on Velocity");
     }
 

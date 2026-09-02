@@ -48,3 +48,13 @@ Password changes and deletion run Argon2id verification outside the server threa
 On first launch OpenGate creates `config.properties` and `messages.properties`. Authentication timing, password bounds, IP limits, premium lookup, limbo routing, lobby order, and player messages can be changed without rebuilding the plugin.
 
 The SQLite schema is versioned and upgraded transactionally. Security events are written to `audit_events`, including logins, failures, rate limits, registration, password changes, session revocation, account deletion, and TOTP changes. Client addresses are stored only as keyed HMAC-SHA256 fingerprints, allowing correlation without retaining raw IP addresses.
+
+Operators with `opengate.admin` can use:
+
+```text
+/opengate lookup <player>
+/opengate audit <player> [limit]
+/opengate revoke <player>
+```
+
+Admin lookups, audit reads, and revocations are themselves audited. Lookup output intentionally excludes addresses and password/TOTP material.

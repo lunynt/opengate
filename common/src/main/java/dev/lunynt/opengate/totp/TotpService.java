@@ -3,6 +3,7 @@ package dev.lunynt.opengate.totp;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.Locale;
@@ -38,7 +39,9 @@ public final class TotpService {
         }
         var step = clock.instant().getEpochSecond() / STEP_SECONDS;
         for (long offset = -1; offset <= 1; offset++) {
-            if (generate(secret, step + offset).equals(code)) {
+            if (MessageDigest.isEqual(
+                    generate(secret, step + offset).getBytes(StandardCharsets.US_ASCII),
+                    code.getBytes(StandardCharsets.US_ASCII))) {
                 return true;
             }
         }

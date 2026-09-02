@@ -1,9 +1,7 @@
 package dev.lunynt.opengate.crypto;
 
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.util.Arrays;
 import java.util.Base64;
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
 import org.bouncycastle.crypto.params.Argon2Parameters;
@@ -77,23 +75,18 @@ public final class Argon2idPasswordHasher implements PasswordHasher {
     }
 
     private static byte[] derive(char[] password, byte[] salt, int memory, int rounds, int lanes) {
-        var passwordBytes = new String(password).getBytes(StandardCharsets.UTF_8);
-        try {
-            var parameters = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
-                    .withVersion(VERSION)
-                    .withMemoryAsKB(memory)
-                    .withIterations(rounds)
-                    .withParallelism(lanes)
-                    .withSalt(salt)
-                    .build();
-            var generator = new Argon2BytesGenerator();
-            generator.init(parameters);
-            var output = new byte[HASH_BYTES];
-            generator.generateBytes(passwordBytes, output);
-            return output;
-        } finally {
-            Arrays.fill(passwordBytes, (byte) 0);
-        }
+        var parameters = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
+                .withVersion(VERSION)
+                .withMemoryAsKB(memory)
+                .withIterations(rounds)
+                .withParallelism(lanes)
+                .withSalt(salt)
+                .build();
+        var generator = new Argon2BytesGenerator();
+        generator.init(parameters);
+        var output = new byte[HASH_BYTES];
+        generator.generateBytes(password, output);
+        return output;
     }
 
     private static void validatePassword(char[] password) {

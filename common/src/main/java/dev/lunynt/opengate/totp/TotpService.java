@@ -7,6 +7,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.Locale;
+import java.util.OptionalLong;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.bouncycastle.util.encoders.Base32;
@@ -34,18 +35,22 @@ public final class TotpService {
     }
 
     public boolean verify(String secret, String code) {
+        return matchingStep(secret, code).isPresent();
+    }
+
+    public OptionalLong matchingStep(String secret, String code) {
         if (code == null || !code.matches("\\d{6}")) {
-            return false;
+            return OptionalLong.empty();
         }
         var step = clock.instant().getEpochSecond() / STEP_SECONDS;
         for (long offset = -1; offset <= 1; offset++) {
             if (MessageDigest.isEqual(
                     generate(secret, step + offset).getBytes(StandardCharsets.US_ASCII),
                     code.getBytes(StandardCharsets.US_ASCII))) {
-                return true;
+                return OptionalLong.of(step + offset);
             }
         }
-        return false;
+        return OptionalLong.empty();
     }
 
     public String provisioningUri(String issuer, String username, String secret) {

@@ -35,9 +35,11 @@ class TotpEnrollmentServiceTest {
         var secret = uri.substring(uri.indexOf("secret=") + 7, uri.indexOf("&issuer="));
 
         assertFalse(service.confirm(account.playerId(), "000000"));
-        assertTrue(service.confirm(account.playerId(), totp.generate(secret, 1)));
+        var code = totp.generate(secret, 1);
+        assertTrue(service.confirm(account.playerId(), code));
         assertTrue(repository.account.totpSecret().startsWith("enc:v1:"));
         assertFalse(repository.account.totpSecret().contains(secret));
+        assertFalse(service.verify(repository.account, code));
     }
 
     private static final class MemoryRepository implements AccountRepository {
@@ -61,6 +63,15 @@ class TotpEnrollmentServiceTest {
         public void save(Account account) {
             this.account = account;
         }
+
+        @Override
+        public boolean claimTotpStep(UUID playerId, long step) {
+            if (step <= lastStep) return false;
+            lastStep = step;
+            return true;
+        }
+
+        private long lastStep = Long.MIN_VALUE;
 
         @Override
         public void delete(UUID playerId) {

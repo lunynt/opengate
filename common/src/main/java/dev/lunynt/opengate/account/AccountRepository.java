@@ -10,6 +10,8 @@ public interface AccountRepository extends AutoCloseable {
 
     void save(Account account);
 
+    boolean claimTotpStep(UUID playerId, long step);
+
     void delete(UUID playerId);
 
     @Override

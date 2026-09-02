@@ -2,6 +2,8 @@ package dev.lunynt.opengate.account;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.lunynt.opengate.auth.IdentityType;
 import java.nio.file.Path;
@@ -33,6 +35,18 @@ class SqliteAccountRepositoryTest {
         assertThrows(
                 AccountAlreadyExistsException.class,
                 () -> repository.save(account(UUID.randomUUID(), "PLAYERONE")));
+    }
+
+    @Test
+    void claimsEachTotpStepOnce() {
+        var repository = new SqliteAccountRepository(directory.resolve("accounts.db"));
+        var account = account(UUID.randomUUID(), "PlayerOne");
+        repository.save(account);
+
+        assertTrue(repository.claimTotpStep(account.playerId(), 100));
+        assertFalse(repository.claimTotpStep(account.playerId(), 100));
+        assertFalse(repository.claimTotpStep(account.playerId(), 99));
+        assertTrue(repository.claimTotpStep(account.playerId(), 101));
     }
 
     private static Account account(UUID playerId, String username) {

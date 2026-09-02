@@ -52,6 +52,7 @@ public final class TotpEnrollmentService {
         }
         var account = accounts.findByPlayerId(playerId).orElseThrow();
         accounts.save(account.withTotpSecret(secrets.encrypt(enrollment.secret())));
+        accounts.claimTotpStep(playerId, totp.matchingStep(enrollment.secret(), code).orElseThrow());
         auditLog.record(AuditEventType.TOTP_ENABLED, playerId, account.username(), null, null);
         pending.remove(playerId);
         return true;
@@ -60,7 +61,9 @@ public final class TotpEnrollmentService {
     public boolean verify(Account account, String code) {
         return Optional.ofNullable(account.totpSecret())
                 .map(secrets::decrypt)
-                .map(secret -> totp.verify(secret, code))
+                .map(secret -> totp.matchingStep(secret, code))
+                .filter(java.util.OptionalLong::isPresent)
+                .map(step -> accounts.claimTotpStep(account.playerId(), step.orElseThrow()))
                 .orElse(false);
     }
 

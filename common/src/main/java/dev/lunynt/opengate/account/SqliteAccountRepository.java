@@ -93,6 +93,22 @@ public final class SqliteAccountRepository implements AccountRepository {
         }
     }
 
+    @Override
+    public boolean claimTotpStep(UUID playerId, long step) {
+        var sql = """
+                INSERT INTO totp_replay(player_id, last_step) VALUES(?, ?)
+                ON CONFLICT(player_id) DO UPDATE SET last_step = excluded.last_step
+                WHERE excluded.last_step > totp_replay.last_step
+                """;
+        try (var connection = connection(); var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, playerId.toString());
+            statement.setLong(2, step);
+            return statement.executeUpdate() == 1;
+        } catch (SQLException exception) {
+            throw new IllegalStateException("could not update OpenGate TOTP counter", exception);
+        }
+    }
+
     private Connection connection() throws SQLException {
         return DriverManager.getConnection(jdbcUrl);
     }

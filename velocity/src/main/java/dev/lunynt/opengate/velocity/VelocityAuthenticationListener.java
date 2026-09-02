@@ -1,7 +1,7 @@
 package dev.lunynt.opengate.velocity;
 
 import com.velocitypowered.api.event.Subscribe;
-import com.velocitypowered.api.event.PostOrder;
+import com.velocitypowered.api.event.EventTask;
 import com.velocitypowered.api.event.command.CommandExecuteEvent;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
@@ -23,25 +23,32 @@ final class VelocityAuthenticationListener {
         this.plugin = plugin;
     }
 
-    @Subscribe(order = PostOrder.LAST)
-    public void onPreLogin(PreLoginEvent event) {
+    @Subscribe(priority = -100)
+    public EventTask onPreLogin(PreLoginEvent event) {
         if (!event.getResult().isAllowed()) {
-            return;
+            return null;
         }
-        var decision = plugin.openGate().identities().resolve(event.getUsername());
-        event.setResult(switch (decision) {
-            case ONLINE -> PreLoginEvent.PreLoginComponentResult.forceOnlineMode();
-            case OFFLINE -> PreLoginEvent.PreLoginComponentResult.forceOfflineMode();
-            case DENY_INVALID_USERNAME -> PreLoginEvent.PreLoginComponentResult.denied(message("invalid-username"));
-            case DENY_CASE_MISMATCH ->
-                    PreLoginEvent.PreLoginComponentResult.denied(message("username-case-mismatch"));
-            case DENY_LOOKUP_UNAVAILABLE ->
-                    PreLoginEvent.PreLoginComponentResult.denied(message("profile-lookup-unavailable"));
+        return EventTask.async(() -> {
+            var decision = plugin.openGate().identities().resolve(event.getUsername());
+            event.setResult(switch (decision) {
+                case ONLINE -> PreLoginEvent.PreLoginComponentResult.forceOnlineMode();
+                case OFFLINE -> PreLoginEvent.PreLoginComponentResult.forceOfflineMode();
+                case DENY_INVALID_USERNAME ->
+                        PreLoginEvent.PreLoginComponentResult.denied(message("invalid-username"));
+                case DENY_CASE_MISMATCH ->
+                        PreLoginEvent.PreLoginComponentResult.denied(message("username-case-mismatch"));
+                case DENY_LOOKUP_UNAVAILABLE ->
+                        PreLoginEvent.PreLoginComponentResult.denied(message("profile-lookup-unavailable"));
+            });
         });
     }
 
     @Subscribe
-    public void onPostLogin(PostLoginEvent event) {
+    public EventTask onPostLogin(PostLoginEvent event) {
+        return EventTask.async(() -> initialize(event));
+    }
+
+    private void initialize(PostLoginEvent event) {
         var player = event.getPlayer();
         var playerId = player.getUniqueId();
         var address = player.getRemoteAddress().getAddress().getHostAddress();

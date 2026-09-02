@@ -3,9 +3,7 @@ package dev.lunynt.opengate.paper;
 import dev.lunynt.opengate.auth.AuthenticationState;
 import dev.lunynt.opengate.auth.IdentityType;
 import dev.lunynt.opengate.auth.ResolvedIdentity;
-import io.papermc.paper.event.player.AsyncChatEvent;
 import java.util.Set;
-import net.kyori.adventure.text.Component;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -14,6 +12,7 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -53,7 +52,7 @@ final class PaperAuthenticationListener implements Listener {
             } catch (RuntimeException exception) {
                 plugin.getLogger().severe("Could not load account for " + player.getName() + ": " + exception.getMessage());
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
-                    if (isCurrent(player, session)) player.kick(message("profile-lookup-unavailable"));
+                    if (isCurrent(player, session)) player.kickPlayer(message("profile-lookup-unavailable"));
                 });
             }
         });
@@ -91,7 +90,7 @@ final class PaperAuthenticationListener implements Listener {
     private void scheduleTimeout(org.bukkit.entity.Player player, java.util.UUID playerId) {
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             if (player.isOnline() && isBlocked(playerId)) {
-                player.kick(message("authentication-timeout"));
+                player.kickPlayer(message("authentication-timeout"));
             }
         }, plugin.openGate().config().authenticationTimeout().toSeconds() * 20L);
     }
@@ -109,7 +108,7 @@ final class PaperAuthenticationListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
-        if (isBlocked(event.getPlayer().getUniqueId()) && event.hasChangedBlock()) {
+        if (isBlocked(event.getPlayer().getUniqueId()) && changedBlock(event)) {
             event.setCancelled(true);
         }
     }
@@ -127,7 +126,7 @@ final class PaperAuthenticationListener implements Listener {
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onChat(AsyncChatEvent event) {
+    public void onChat(AsyncPlayerChatEvent event) {
         if (isBlocked(event.getPlayer().getUniqueId())) event.setCancelled(true);
     }
 
@@ -171,7 +170,17 @@ final class PaperAuthenticationListener implements Listener {
                 .orElse(true);
     }
 
-    private Component message(String key) {
-        return Component.text(plugin.openGate().messages().get(key));
+    private static boolean changedBlock(PlayerMoveEvent event) {
+        var from = event.getFrom();
+        var to = event.getTo();
+        return to != null
+                && (!from.getWorld().equals(to.getWorld())
+                        || from.getBlockX() != to.getBlockX()
+                        || from.getBlockY() != to.getBlockY()
+                        || from.getBlockZ() != to.getBlockZ());
+    }
+
+    private String message(String key) {
+        return plugin.openGate().messages().get(key);
     }
 }

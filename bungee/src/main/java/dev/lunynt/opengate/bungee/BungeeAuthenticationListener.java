@@ -39,6 +39,10 @@ final class BungeeAuthenticationListener implements Listener {
                     case DENY_CASE_MISMATCH -> deny(event, "username-case-mismatch");
                     case DENY_LOOKUP_UNAVAILABLE -> deny(event, "profile-lookup-unavailable");
                 }
+            } catch (RuntimeException exception) {
+                plugin.getLogger().warning("Could not resolve identity for "
+                        + event.getConnection().getName() + ": " + exception.getMessage());
+                deny(event, "profile-lookup-unavailable");
             } finally {
                 event.completeIntent(plugin);
             }
@@ -48,7 +52,16 @@ final class BungeeAuthenticationListener implements Listener {
     @EventHandler
     public void onPostLogin(PostLoginEvent event) {
         var player = event.getPlayer();
-        plugin.proxy().getScheduler().runAsync(plugin, () -> initialize(player));
+        plugin.scheduleAuthenticationTimeout(player);
+        plugin.proxy().getScheduler().runAsync(plugin, () -> {
+            try {
+                initialize(player);
+            } catch (RuntimeException exception) {
+                plugin.getLogger().warning(
+                        "Could not load account for " + player.getName() + ": " + exception.getMessage());
+                if (player.isConnected()) player.disconnect(plugin.message("profile-lookup-unavailable"));
+            }
+        });
     }
 
     @EventHandler
@@ -108,7 +121,6 @@ final class BungeeAuthenticationListener implements Listener {
         } else {
             player.sendMessage(plugin.message("login-prompt"));
         }
-        plugin.scheduleAuthenticationTimeout(player);
     }
 
     private boolean isBlocked(UUID playerId) {
@@ -119,7 +131,7 @@ final class BungeeAuthenticationListener implements Listener {
 
     private void deny(PreLoginEvent event, String message) {
         event.setCancelled(true);
-        event.setCancelReason(plugin.message(message));
+        event.setReason(plugin.message(message));
     }
 
     static String address(ProxiedPlayer player) {

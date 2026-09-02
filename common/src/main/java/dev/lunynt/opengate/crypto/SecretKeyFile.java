@@ -6,7 +6,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.SecureRandom;
 import java.util.Base64;
-import java.util.Set;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -24,13 +23,7 @@ public final class SecretKeyFile {
                         Base64.getEncoder().encodeToString(bytes),
                         StandardOpenOption.CREATE_NEW,
                         StandardOpenOption.WRITE);
-                try {
-                    Files.setPosixFilePermissions(file, Set.of(
-                            java.nio.file.attribute.PosixFilePermission.OWNER_READ,
-                            java.nio.file.attribute.PosixFilePermission.OWNER_WRITE));
-                } catch (UnsupportedOperationException ignored) {
-                    // posix permissions are unavailable
-                }
+                SecureFiles.makeOwnerOnly(file);
             }
             var decoded = Base64.getDecoder().decode(Files.readString(file).trim());
             if (decoded.length != 32) {

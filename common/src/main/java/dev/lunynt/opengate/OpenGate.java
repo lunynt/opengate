@@ -11,6 +11,7 @@ import dev.lunynt.opengate.auth.SessionRegistry;
 import dev.lunynt.opengate.crypto.Argon2idPasswordHasher;
 import dev.lunynt.opengate.crypto.SecretCipher;
 import dev.lunynt.opengate.crypto.SecretKeyFile;
+import dev.lunynt.opengate.crypto.SecureFiles;
 import dev.lunynt.opengate.config.OpenGateConfig;
 import dev.lunynt.opengate.config.OpenGateMessages;
 import dev.lunynt.opengate.identity.MojangProfileLookup;
@@ -55,11 +56,13 @@ public final class OpenGate implements AutoCloseable {
     }
 
     public static OpenGate create(Path dataDirectory) {
+        SecureFiles.createPrivateDirectory(dataDirectory);
         var clock = Clock.systemUTC();
         var config = OpenGateConfig.load(dataDirectory);
         var messages = OpenGateMessages.load(dataDirectory);
         var databaseFile = dataDirectory.resolve("opengate.db");
         var repository = new SqliteAccountRepository(databaseFile);
+        SecureFiles.makeOwnerOnly(databaseFile);
         var secretKey = SecretKeyFile.loadOrCreate(dataDirectory.resolve("secret.key"));
         var addressFingerprint = new AddressFingerprint(secretKey);
         var auditLog = new SqliteAuditLog(databaseFile, clock, addressFingerprint);

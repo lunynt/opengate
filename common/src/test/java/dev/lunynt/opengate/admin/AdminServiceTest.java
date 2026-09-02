@@ -81,6 +81,11 @@ class AdminServiceTest {
         }
 
         @Override
+        public boolean claimTotpStep(UUID playerId, long step) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public void delete(UUID playerId) {}
     }
 

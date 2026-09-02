@@ -62,6 +62,11 @@ class IdentityResolverTest {
         }
 
         @Override
+        public boolean claimTotpStep(UUID playerId, long step) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public void delete(UUID playerId) {
             values.values().removeIf(account -> account.playerId().equals(playerId));
         }

@@ -1,3 +1,3 @@
 rootProject.name = "opengate"
 
-include("common", "paper", "velocity")
+include("common", "paper", "velocity", "bungee")

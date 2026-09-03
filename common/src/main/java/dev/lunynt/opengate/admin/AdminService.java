@@ -46,7 +46,6 @@ public final class AdminService {
     public Optional<Account> revoke(String username, String actor) {
         var account = accounts.find(username);
         account.ifPresent(value -> {
-            accounts.revokeTrustedSession(value.playerId());
             sessions.close(value.playerId());
             auditLog.record(
                     AuditEventType.ADMIN_SESSION_REVOKED,

@@ -2,9 +2,9 @@ package dev.lunynt.opengate.account;
 
 import dev.lunynt.opengate.auth.IdentityType;
 import dev.lunynt.opengate.database.SqliteSchema;
+import dev.lunynt.opengate.database.SqliteConnections;
 import java.nio.file.Path;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -14,8 +14,7 @@ import java.util.UUID;
 
 public final class SqliteAccountRepository implements AccountRepository {
     private static final String SELECT_COLUMNS = """
-            SELECT player_id, username, identity_type, password_hash, totp_secret,
-                   created_at, last_authenticated_at, last_address_fingerprint
+            SELECT player_id, username, identity_type, password_hash, totp_secret, created_at
             FROM accounts
             """;
 
@@ -52,16 +51,14 @@ public final class SqliteAccountRepository implements AccountRepository {
         var sql = """
                 INSERT INTO accounts (
                     player_id, username, normalized_username, identity_type, password_hash,
-                    totp_secret, created_at, last_authenticated_at, last_address_fingerprint
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    totp_secret, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(player_id) DO UPDATE SET
                     username = excluded.username,
                     normalized_username = excluded.normalized_username,
                     identity_type = excluded.identity_type,
                     password_hash = excluded.password_hash,
-                    totp_secret = excluded.totp_secret,
-                    last_authenticated_at = excluded.last_authenticated_at,
-                    last_address_fingerprint = excluded.last_address_fingerprint
+                    totp_secret = excluded.totp_secret
                 """;
         try (var connection = connection(); var statement = connection.prepareStatement(sql)) {
             statement.setString(1, account.playerId().toString());
@@ -71,14 +68,35 @@ public final class SqliteAccountRepository implements AccountRepository {
             statement.setString(5, account.passwordHash());
             statement.setString(6, account.totpSecret());
             statement.setLong(7, account.createdAt().toEpochMilli());
-            setInstant(statement, 8, account.lastAuthenticatedAt());
-            statement.setString(9, account.lastAddressFingerprint());
             statement.executeUpdate();
         } catch (SQLException exception) {
             if (exception.getMessage() != null && exception.getMessage().contains("UNIQUE constraint failed")) {
                 throw new AccountAlreadyExistsException("username is already registered", exception);
             }
             throw new IllegalStateException("could not save OpenGate account", exception);
+        }
+    }
+
+    @Override
+    public void updatePassword(UUID playerId, String passwordHash) {
+        updateCredential("password_hash", playerId, passwordHash);
+    }
+
+    @Override
+    public void updateTotpSecret(UUID playerId, String encryptedSecret) {
+        updateCredential("totp_secret", playerId, encryptedSecret);
+    }
+
+    private void updateCredential(String column, UUID playerId, String value) {
+        var sql = "UPDATE accounts SET " + column + " = ? WHERE player_id = ?";
+        try (var connection = connection(); var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, value);
+            statement.setString(2, playerId.toString());
+            if (statement.executeUpdate() != 1) {
+                throw new IllegalStateException("OpenGate account disappeared during update");
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("could not update OpenGate credential", exception);
         }
     }
 
@@ -110,7 +128,7 @@ public final class SqliteAccountRepository implements AccountRepository {
     }
 
     private Connection connection() throws SQLException {
-        return DriverManager.getConnection(jdbcUrl);
+        return SqliteConnections.open(jdbcUrl);
     }
 
     private static Account map(ResultSet results) throws SQLException {
@@ -120,23 +138,7 @@ public final class SqliteAccountRepository implements AccountRepository {
                 IdentityType.valueOf(results.getString("identity_type")),
                 results.getString("password_hash"),
                 results.getString("totp_secret"),
-                Instant.ofEpochMilli(results.getLong("created_at")),
-                nullableInstant(results, "last_authenticated_at"),
-                results.getString("last_address_fingerprint"));
-    }
-
-    private static Instant nullableInstant(ResultSet results, String column) throws SQLException {
-        var value = results.getLong(column);
-        return results.wasNull() ? null : Instant.ofEpochMilli(value);
-    }
-
-    private static void setInstant(java.sql.PreparedStatement statement, int index, Instant instant)
-            throws SQLException {
-        if (instant == null) {
-            statement.setNull(index, java.sql.Types.BIGINT);
-        } else {
-            statement.setLong(index, instant.toEpochMilli());
-        }
+                Instant.ofEpochMilli(results.getLong("created_at")));
     }
 
     private static String normalize(String username) {

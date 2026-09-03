@@ -57,10 +57,6 @@ final class VelocityAdminCommand implements SimpleCommand {
         source.sendMessage(Component.text("UUID: " + value.playerId()));
         source.sendMessage(Component.text("Identity: " + value.identityType()));
         source.sendMessage(Component.text("Created: " + DateTimeFormatter.ISO_INSTANT.format(value.createdAt())));
-        source.sendMessage(Component.text("Last authentication: "
-                + (value.lastAuthenticatedAt() == null
-                        ? "never"
-                        : DateTimeFormatter.ISO_INSTANT.format(value.lastAuthenticatedAt()))));
         source.sendMessage(Component.text("TOTP: " + (value.totpSecret() != null ? "enabled" : "disabled")));
     }
 

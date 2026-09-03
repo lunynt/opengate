@@ -44,8 +44,12 @@ class SqliteSchemaTest {
             try (var accounts = statement.executeQuery("SELECT COUNT(*) FROM accounts")) {
                 assertEquals(1, accounts.getInt(1));
             }
-            try (var accounts = statement.executeQuery("SELECT last_address_fingerprint FROM accounts")) {
-                assertEquals(null, accounts.getString(1));
+            try (var columns = statement.executeQuery("PRAGMA table_info(accounts)")) {
+                while (columns.next()) {
+                    var name = columns.getString("name");
+                    org.junit.jupiter.api.Assertions.assertFalse(name.equals("last_authenticated_at")
+                            || name.equals("last_address_fingerprint"));
+                }
             }
             try (var audits = statement.executeQuery("SELECT COUNT(*) FROM audit_events")) {
                 assertEquals(0, audits.getInt(1));

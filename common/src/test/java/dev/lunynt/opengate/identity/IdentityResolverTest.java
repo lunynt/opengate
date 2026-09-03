@@ -40,7 +40,7 @@ class IdentityResolverTest {
     }
 
     private static Account account(String username, IdentityType type) {
-        return new Account(UUID.randomUUID(), username, type, "hash", null, Instant.EPOCH, null, null);
+        return new Account(UUID.randomUUID(), username, type, "hash", null, Instant.EPOCH);
     }
 
     private static final class MemoryAccounts implements AccountRepository {

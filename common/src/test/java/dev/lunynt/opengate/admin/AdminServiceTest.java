@@ -10,7 +10,6 @@ import dev.lunynt.opengate.account.LoginRateLimiter;
 import dev.lunynt.opengate.audit.AuditEventType;
 import dev.lunynt.opengate.audit.AuditLog;
 import dev.lunynt.opengate.audit.AuditRecord;
-import dev.lunynt.opengate.audit.AddressFingerprint;
 import dev.lunynt.opengate.auth.IdentityType;
 import dev.lunynt.opengate.auth.SessionRegistry;
 import dev.lunynt.opengate.crypto.PasswordHasher;
@@ -24,14 +23,12 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executors;
-import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 
 class AdminServiceTest {
     @Test
     void lookupAndRevokeAreAudited() {
-        var account = new Account(
-                UUID.randomUUID(), "Player", IdentityType.OFFLINE, "hash", null, Instant.EPOCH, Instant.EPOCH, "ip");
+        var account = new Account(UUID.randomUUID(), "Player", IdentityType.OFFLINE, "hash", null, Instant.EPOCH);
         var repository = new MemoryRepository(account);
         var audit = new MemoryAudit();
         var clock = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC);
@@ -43,16 +40,16 @@ class AdminServiceTest {
                 8,
                 128,
                 new LoginRateLimiter(10, Duration.ofMinutes(10), clock),
-                audit,
-                new AddressFingerprint(new SecretKeySpec(new byte[32], "AES")))) {
+                new LoginRateLimiter(10, Duration.ofMinutes(10), clock),
+                new LoginRateLimiter(5, Duration.ofHours(1), clock),
+                audit)) {
             var admin = new AdminService(accounts, new SessionRegistry(clock), audit);
 
             assertTrue(admin.lookup("player", "console").isPresent());
             assertTrue(admin.revoke("Player", "console").isPresent());
 
             assertEquals(AuditEventType.ADMIN_ACCOUNT_LOOKUP, audit.types.get(0));
-            assertEquals(AuditEventType.ADMIN_SESSION_REVOKED, audit.types.get(2));
-            assertTrue(repository.account.lastAuthenticatedAt() == null);
+            assertEquals(AuditEventType.ADMIN_SESSION_REVOKED, audit.types.get(1));
         }
     }
 

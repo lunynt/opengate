@@ -38,16 +38,10 @@ final class PaperAuthenticationListener implements Listener {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 var account = plugin.openGate().accounts().find(playerId);
-                var trusted = account.filter(value -> plugin.openGate()
-                                .accounts()
-                                .hasTrustedSession(
-                                        value, address, plugin.openGate().config().trustedSessionLifetime()))
-                        .isPresent();
                 plugin.getServer().getScheduler().runTask(plugin, () -> finishJoin(
                         player,
                         session,
                         account,
-                        trusted,
                         plugin.getServer().getOnlineMode() ? IdentityType.PREMIUM : IdentityType.OFFLINE));
             } catch (RuntimeException exception) {
                 plugin.getLogger().severe("Could not load account for " + player.getName() + ": " + exception.getMessage());
@@ -63,7 +57,6 @@ final class PaperAuthenticationListener implements Listener {
             org.bukkit.entity.Player player,
             dev.lunynt.opengate.auth.AuthenticationSession session,
             java.util.Optional<dev.lunynt.opengate.account.Account> account,
-            boolean trusted,
             IdentityType identityType) {
         if (!isCurrent(player, session)) return;
         var playerId = player.getUniqueId();
@@ -74,8 +67,7 @@ final class PaperAuthenticationListener implements Listener {
                 identityType,
                 registered,
                 account.map(value -> value.passwordHash() != null).orElse(false),
-                account.map(value -> value.totpSecret() != null).orElse(false),
-                trusted));
+                account.map(value -> value.totpSecret() != null).orElse(false)));
 
         if (session.state() == AuthenticationState.AUTHENTICATED) {
             session.release();

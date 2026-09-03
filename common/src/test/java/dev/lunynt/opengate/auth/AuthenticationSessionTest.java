@@ -17,7 +17,7 @@ class AuthenticationSessionTest {
     void premiumIdentityAuthenticatesAutomatically() {
         var session = new AuthenticationSession(CONNECTION_ID, Instant.EPOCH);
 
-        session.resolve(identity(IdentityType.PREMIUM, true, false, false, false));
+        session.resolve(identity(IdentityType.PREMIUM, true, false, false));
 
         assertEquals(AuthenticationState.AUTHENTICATED, session.state());
         assertEquals(AuthenticationMethod.PREMIUM, session.method().orElseThrow());
@@ -26,12 +26,13 @@ class AuthenticationSessionTest {
     @Test
     void passwordAndTotpAreSeparateStages() {
         var session = new AuthenticationSession(CONNECTION_ID, Instant.EPOCH);
-        session.resolve(identity(IdentityType.OFFLINE, true, true, true, false));
+        session.resolve(identity(IdentityType.OFFLINE, true, true, true));
 
         session.beginPasswordVerification();
         session.acceptPassword();
         assertEquals(AuthenticationState.AWAITING_TOTP, session.state());
 
+        session.beginTotpVerification();
         session.acceptTotp();
         assertEquals(AuthenticationState.AUTHENTICATED, session.state());
         assertEquals(AuthenticationMethod.TOTP, session.method().orElseThrow());
@@ -48,7 +49,7 @@ class AuthenticationSessionTest {
     @Test
     void closesAfterMaximumPasswordAttempts() {
         var session = new AuthenticationSession(CONNECTION_ID, Instant.EPOCH);
-        session.resolve(identity(IdentityType.OFFLINE, true, true, false, false));
+        session.resolve(identity(IdentityType.OFFLINE, true, true, false));
 
         session.beginPasswordVerification();
         assertFalse(session.rejectPassword(2));
@@ -59,13 +60,26 @@ class AuthenticationSessionTest {
         assertEquals(2, session.failedAttempts());
     }
 
+    @Test
+    void closesAfterMaximumTotpAttempts() {
+        var session = new AuthenticationSession(CONNECTION_ID, Instant.EPOCH);
+        session.resolve(identity(IdentityType.OFFLINE, true, true, true));
+        session.beginPasswordVerification();
+        session.acceptPassword();
+
+        session.beginTotpVerification();
+        assertFalse(session.rejectTotp(2));
+        session.beginTotpVerification();
+        assertTrue(session.rejectTotp(2));
+
+        assertEquals(AuthenticationState.CLOSED, session.state());
+    }
+
     private static ResolvedIdentity identity(
             IdentityType type,
             boolean registered,
             boolean passwordRequired,
-            boolean totpRequired,
-            boolean trustedSession) {
-        return new ResolvedIdentity(
-                "Player", PLAYER_ID, type, registered, passwordRequired, totpRequired, trustedSession);
+            boolean totpRequired) {
+        return new ResolvedIdentity("Player", PLAYER_ID, type, registered, passwordRequired, totpRequired);
     }
 }

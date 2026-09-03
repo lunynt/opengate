@@ -1,7 +1,10 @@
 package dev.lunynt.opengate.config;
 
 import java.nio.file.Path;
+import java.io.IOException;
+import java.io.StringReader;
 import java.util.Map;
+import java.util.Properties;
 import java.util.stream.Collectors;
 
 public final class OpenGateMessages {
@@ -30,6 +33,7 @@ public final class OpenGateMessages {
             logged-out=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ʟᴏɢɢᴇᴅ ᴏᴜᴛ
             account-deleted=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴀᴄᴄᴏᴜɴᴛ ᴅᴇʟᴇᴛᴇᴅ
             account-action-failed=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴀᴄᴄᴏᴜɴᴛ ᴀᴄᴛɪᴏɴ ꜰᴀɪʟᴇᴅ
+            service-busy=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ꜱᴇʀᴠɪᴄᴇ ʙᴜꜱʏ, ᴛʀʏ ᴀɢᴀɪɴ
             """;
 
     private final Map<String, String> messages;
@@ -41,9 +45,20 @@ public final class OpenGateMessages {
     public static OpenGateMessages load(Path dataDirectory) {
         var file = dataDirectory.resolve("messages.properties");
         OpenGateConfig.createDefault(file, DEFAULTS);
-        var properties = OpenGateConfig.loadProperties(file);
+        var properties = defaults();
+        properties.putAll(OpenGateConfig.loadProperties(file));
         return new OpenGateMessages(properties.stringPropertyNames().stream()
                 .collect(Collectors.toMap(key -> key, properties::getProperty)));
+    }
+
+    private static Properties defaults() {
+        var properties = new Properties();
+        try {
+            properties.load(new StringReader(DEFAULTS));
+            return properties;
+        } catch (IOException exception) {
+            throw new IllegalStateException("invalid built-in OpenGate messages", exception);
+        }
     }
 
     public String get(String key) {

@@ -59,7 +59,7 @@ final class BungeeAuthenticationCommand extends Command {
                         if (!player.isConnected()) return;
                         if (error != null) {
                             session.registrationFailed();
-                            send(player, "Registration failed: " + rootMessage(error));
+                            send(player, plugin.openGate().messages().get("account-action-failed"));
                             return;
                         }
                         session.register();
@@ -104,6 +104,11 @@ final class BungeeAuthenticationCommand extends Command {
             player.disconnect(plugin.message("rate-limited"));
             return;
         }
+        if (result == AuthenticationResult.SERVICE_BUSY) {
+            session.close();
+            player.disconnect(plugin.message("service-busy"));
+            return;
+        }
         if (error != null || result != AuthenticationResult.SUCCESS) {
             if (session.rejectPassword(plugin.openGate().config().maximumLoginAttempts())) {
                 player.disconnect(plugin.message("too-many-attempts"));
@@ -134,8 +139,13 @@ final class BungeeAuthenticationCommand extends Command {
                 send(player, "Two-factor authentication is not required.");
                 return;
             }
-            if (!plugin.openGate().totp().verify(account, arguments[0])) {
-                player.sendMessage(plugin.message("totp-invalid"));
+            session.beginTotpVerification();
+            if (!plugin.openGate().totp().verify(account, arguments[0], BungeeAuthenticationListener.address(player))) {
+                if (session.rejectTotp(plugin.openGate().config().maximumLoginAttempts())) {
+                    player.disconnect(plugin.message("too-many-attempts"));
+                } else {
+                    player.sendMessage(plugin.message("totp-invalid"));
+                }
                 return;
             }
             session.acceptTotp();
@@ -199,7 +209,6 @@ final class BungeeAuthenticationCommand extends Command {
         switch (arguments[0].toLowerCase(Locale.ROOT)) {
             case "password" -> changePassword(player, arguments);
             case "logout" -> {
-                plugin.openGate().accounts().revokeTrustedSession(player.getUniqueId());
                 plugin.openGate().sessions().close(player.getUniqueId());
                 player.disconnect(plugin.message("logged-out"));
             }
@@ -250,6 +259,8 @@ final class BungeeAuthenticationCommand extends Command {
         if (error != null || result != AccountActionResult.SUCCESS) {
             if (result == AccountActionResult.RATE_LIMITED) {
                 player.disconnect(plugin.message("rate-limited"));
+            } else if (result == AccountActionResult.SERVICE_BUSY) {
+                player.sendMessage(plugin.message("service-busy"));
             } else {
                 player.sendMessage(plugin.message("account-action-failed"));
             }
@@ -268,9 +279,4 @@ final class BungeeAuthenticationCommand extends Command {
         sender.sendMessage(new TextComponent(message));
     }
 
-    private static String rootMessage(Throwable error) {
-        var cause = error;
-        while (cause.getCause() != null) cause = cause.getCause();
-        return cause.getMessage() == null ? "internal error" : cause.getMessage();
-    }
 }

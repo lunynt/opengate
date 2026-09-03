@@ -73,8 +73,22 @@ public final class AuthenticationSession {
     }
 
     public synchronized void acceptTotp() {
-        requireState(AuthenticationState.AWAITING_TOTP);
+        requireState(AuthenticationState.VERIFYING_TOTP);
         authenticate(AuthenticationMethod.TOTP);
+    }
+
+    public synchronized void beginTotpVerification() {
+        requireState(AuthenticationState.AWAITING_TOTP);
+        state = AuthenticationState.VERIFYING_TOTP;
+    }
+
+    public synchronized boolean rejectTotp(int maximumAttempts) {
+        requireState(AuthenticationState.VERIFYING_TOTP);
+        failedAttempts++;
+        state = failedAttempts >= maximumAttempts
+                ? AuthenticationState.CLOSED
+                : AuthenticationState.AWAITING_TOTP;
+        return state == AuthenticationState.CLOSED;
     }
 
     public synchronized void release() {

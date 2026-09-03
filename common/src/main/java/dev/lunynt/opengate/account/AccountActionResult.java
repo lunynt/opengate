@@ -4,5 +4,6 @@ public enum AccountActionResult {
     SUCCESS,
     ACCOUNT_NOT_FOUND,
     WRONG_PASSWORD,
-    RATE_LIMITED
+    RATE_LIMITED,
+    SERVICE_BUSY
 }

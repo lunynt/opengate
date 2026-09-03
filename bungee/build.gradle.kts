@@ -1,3 +1,7 @@
+plugins {
+    id("com.gradleup.shadow")
+}
+
 dependencies {
     implementation(project(":common"))
     compileOnly("net.md-5:bungeecord-api:1.21-R0.5-SNAPSHOT")
@@ -8,9 +12,15 @@ base {
 }
 
 tasks.jar {
-    dependsOn(":common:jar")
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    from(configurations.runtimeClasspath.map { classpath ->
-        classpath.map { file -> if (file.isDirectory) file else zipTree(file) }
-    })
+    archiveClassifier.set("thin")
 }
+
+tasks.shadowJar {
+    dependsOn(":common:jar")
+    archiveClassifier.set("")
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    mergeServiceFiles()
+    exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
+}
+
+tasks.assemble { dependsOn(tasks.shadowJar) }

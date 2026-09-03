@@ -47,6 +47,10 @@ class SqliteAccountRepositoryTest {
         assertFalse(repository.claimTotpStep(account.playerId(), 100));
         assertFalse(repository.claimTotpStep(account.playerId(), 99));
         assertTrue(repository.claimTotpStep(account.playerId(), 101));
+
+        repository.delete(account.playerId());
+        repository.save(account);
+        assertTrue(repository.claimTotpStep(account.playerId(), 1));
     }
 
     private static Account account(UUID playerId, String username) {
@@ -56,8 +60,6 @@ class SqliteAccountRepositoryTest {
                 IdentityType.OFFLINE,
                 "hash",
                 null,
-                Instant.EPOCH,
-                null,
-                null);
+                Instant.EPOCH);
     }
 }

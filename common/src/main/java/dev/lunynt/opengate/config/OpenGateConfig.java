@@ -11,10 +11,12 @@ import java.util.Properties;
 
 public record OpenGateConfig(
         Duration authenticationTimeout,
-        Duration trustedSessionLifetime,
         int maximumLoginAttempts,
         int maximumIpFailures,
+        int maximumAccountFailures,
         Duration ipFailureWindow,
+        int maximumRegistrationsPerIp,
+        Duration registrationWindow,
         int minimumPasswordLength,
         int maximumPasswordLength,
         boolean premiumLookupEnabled,
@@ -25,10 +27,12 @@ public record OpenGateConfig(
     private static final String DEFAULTS = """
             # opengate
             authentication-timeout-seconds=60
-            trusted-session-hours=6
             maximum-login-attempts=3
             maximum-ip-failures=10
+            maximum-account-failures=10
             ip-failure-window-minutes=10
+            maximum-registrations-per-ip=5
+            registration-window-minutes=60
             minimum-password-length=8
             maximum-password-length=128
             premium-lookup-enabled=true
@@ -41,17 +45,23 @@ public record OpenGateConfig(
         if (authenticationTimeout.isNegative() || authenticationTimeout.isZero()) {
             throw new IllegalArgumentException("authentication timeout must be positive");
         }
-        if (trustedSessionLifetime.isNegative()) {
-            throw new IllegalArgumentException("trusted session lifetime must not be negative");
-        }
         if (maximumLoginAttempts < 1 || maximumLoginAttempts > 20) {
             throw new IllegalArgumentException("maximum login attempts must be between 1 and 20");
         }
         if (maximumIpFailures < maximumLoginAttempts || maximumIpFailures > 1_000) {
             throw new IllegalArgumentException("maximum IP failures must be at least the session limit and at most 1000");
         }
+        if (maximumAccountFailures < maximumLoginAttempts || maximumAccountFailures > 1_000) {
+            throw new IllegalArgumentException("maximum account failures must be at least the session limit and at most 1000");
+        }
         if (ipFailureWindow.isNegative() || ipFailureWindow.isZero()) {
             throw new IllegalArgumentException("IP failure window must be positive");
+        }
+        if (maximumRegistrationsPerIp < 1 || maximumRegistrationsPerIp > 100) {
+            throw new IllegalArgumentException("maximum registrations per IP must be between 1 and 100");
+        }
+        if (registrationWindow.isNegative() || registrationWindow.isZero()) {
+            throw new IllegalArgumentException("registration window must be positive");
         }
         if (minimumPasswordLength < 8 || maximumPasswordLength < minimumPasswordLength) {
             throw new IllegalArgumentException("invalid password length range");
@@ -74,10 +84,12 @@ public record OpenGateConfig(
         var properties = loadProperties(file);
         return new OpenGateConfig(
                 Duration.ofSeconds(integer(properties, "authentication-timeout-seconds")),
-                Duration.ofHours(integer(properties, "trusted-session-hours")),
                 integer(properties, "maximum-login-attempts"),
                 integer(properties, "maximum-ip-failures"),
+                integer(properties, "maximum-account-failures", 10),
                 Duration.ofMinutes(integer(properties, "ip-failure-window-minutes")),
+                integer(properties, "maximum-registrations-per-ip", 5),
+                Duration.ofMinutes(integer(properties, "registration-window-minutes", 60)),
                 integer(properties, "minimum-password-length"),
                 integer(properties, "maximum-password-length"),
                 bool(properties, "premium-lookup-enabled"),
@@ -117,6 +129,11 @@ public record OpenGateConfig(
         } catch (NumberFormatException exception) {
             throw new IllegalArgumentException(key + " must be an integer", exception);
         }
+    }
+
+    private static int integer(Properties properties, String key, int fallback) {
+        var value = properties.getProperty(key);
+        return value == null ? fallback : integer(properties, key);
     }
 
     private static boolean bool(Properties properties, String key) {

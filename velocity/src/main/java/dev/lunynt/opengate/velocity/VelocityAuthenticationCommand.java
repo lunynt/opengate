@@ -61,7 +61,7 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
                     if (!player.isActive()) return;
                     if (error != null) {
                         session.registrationFailed();
-                        player.sendMessage(Component.text("Registration failed: " + rootMessage(error)));
+                        player.sendMessage(message("account-action-failed"));
                         return;
                     }
                     session.register();
@@ -90,6 +90,11 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
             if (result == AuthenticationResult.RATE_LIMITED) {
                 session.close();
                 player.disconnect(message("rate-limited"));
+                return;
+            }
+            if (result == AuthenticationResult.SERVICE_BUSY) {
+                session.close();
+                player.disconnect(message("service-busy"));
                 return;
             }
             if (error != null || result != AuthenticationResult.SUCCESS) {
@@ -123,8 +128,13 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
             player.sendMessage(Component.text("Two-factor authentication is not required."));
             return;
         }
-        if (!plugin.openGate().totp().verify(account, arguments[0])) {
-            player.sendMessage(message("totp-invalid"));
+        session.beginTotpVerification();
+        if (!plugin.openGate().totp().verify(account, arguments[0], address(player))) {
+            if (session.rejectTotp(plugin.openGate().config().maximumLoginAttempts())) {
+                player.disconnect(message("too-many-attempts"));
+            } else {
+                player.sendMessage(message("totp-invalid"));
+            }
             return;
         }
         session.acceptTotp();
@@ -194,7 +204,6 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
         switch (arguments[0].toLowerCase(java.util.Locale.ROOT)) {
             case "password" -> changePassword(player, arguments);
             case "logout" -> {
-                plugin.openGate().accounts().revokeTrustedSession(player.getUniqueId());
                 plugin.openGate().sessions().close(player.getUniqueId());
                 player.disconnect(message("logged-out"));
             }
@@ -244,6 +253,8 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
         if (error != null || result != AccountActionResult.SUCCESS) {
             if (result == AccountActionResult.RATE_LIMITED) {
                 player.disconnect(message("rate-limited"));
+            } else if (result == AccountActionResult.SERVICE_BUSY) {
+                player.sendMessage(message("service-busy"));
             } else {
                 player.sendMessage(message("account-action-failed"));
             }
@@ -254,12 +265,6 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
 
     private static String address(Player player) {
         return player.getRemoteAddress().getAddress().getHostAddress();
-    }
-
-    private static String rootMessage(Throwable error) {
-        var cause = error;
-        while (cause.getCause() != null) cause = cause.getCause();
-        return cause.getMessage() == null ? "internal error" : cause.getMessage();
     }
 
     private Component message(String key) {

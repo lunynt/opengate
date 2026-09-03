@@ -59,18 +59,13 @@ final class VelocityAuthenticationListener {
         plugin.openGate().sessions().close(playerId);
         var session = plugin.openGate().sessions().open(playerId);
         var account = plugin.openGate().accounts().find(playerId);
-        var trusted = account.filter(value -> plugin.openGate()
-                        .accounts()
-                        .hasTrustedSession(value, address, plugin.openGate().config().trustedSessionLifetime()))
-                .isPresent();
         session.resolve(new ResolvedIdentity(
                 player.getUsername(),
                 playerId,
                 player.isOnlineMode() ? IdentityType.PREMIUM : IdentityType.OFFLINE,
                 account.isPresent(),
                 account.map(value -> value.passwordHash() != null).orElse(false),
-                account.map(value -> value.totpSecret() != null).orElse(false),
-                trusted));
+                account.map(value -> value.totpSecret() != null).orElse(false)));
 
         if (session.state() == AuthenticationState.AUTHENTICATED) {
             session.release();

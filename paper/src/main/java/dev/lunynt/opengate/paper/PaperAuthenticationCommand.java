@@ -58,7 +58,8 @@ final class PaperAuthenticationCommand implements CommandExecutor {
                     if (!player.isOnline()) return;
                     if (error != null) {
                         session.registrationFailed();
-                        player.sendMessage("Registration failed: " + rootMessage(error));
+                        plugin.getLogger().warning("Registration failed for " + player.getName());
+                        player.sendMessage(message("account-action-failed"));
                         return;
                     }
                     session.register();
@@ -88,6 +89,11 @@ final class PaperAuthenticationCommand implements CommandExecutor {
                     if (result == AuthenticationResult.RATE_LIMITED) {
                         session.close();
                         player.kickPlayer(message("rate-limited"));
+                        return;
+                    }
+                    if (result == AuthenticationResult.SERVICE_BUSY) {
+                        session.close();
+                        player.kickPlayer(message("service-busy"));
                         return;
                     }
                     if (error != null || result != AuthenticationResult.SUCCESS) {
@@ -121,8 +127,13 @@ final class PaperAuthenticationCommand implements CommandExecutor {
             player.sendMessage("Two-factor authentication is not required.");
             return true;
         }
-        if (!plugin.openGate().totp().verify(account, arguments[0])) {
-            player.sendMessage(message("totp-invalid"));
+        session.beginTotpVerification();
+        if (!plugin.openGate().totp().verify(account, arguments[0], address(player))) {
+            if (session.rejectTotp(plugin.openGate().config().maximumLoginAttempts())) {
+                player.kickPlayer(message("too-many-attempts"));
+            } else {
+                player.sendMessage(message("totp-invalid"));
+            }
             return true;
         }
         session.acceptTotp();
@@ -196,7 +207,6 @@ final class PaperAuthenticationCommand implements CommandExecutor {
         return switch (arguments[0].toLowerCase(java.util.Locale.ROOT)) {
             case "password" -> changePassword(player, arguments);
             case "logout" -> {
-                plugin.openGate().accounts().revokeTrustedSession(player.getUniqueId());
                 plugin.openGate().sessions().close(player.getUniqueId());
                 player.kickPlayer(message("logged-out"));
                 yield true;
@@ -252,6 +262,8 @@ final class PaperAuthenticationCommand implements CommandExecutor {
             if (error != null || result != AccountActionResult.SUCCESS) {
                 if (result == AccountActionResult.RATE_LIMITED) {
                     player.kickPlayer(message("rate-limited"));
+                } else if (result == AccountActionResult.SERVICE_BUSY) {
+                    player.sendMessage(message("service-busy"));
                 } else {
                     player.sendMessage(message("account-action-failed"));
                 }
@@ -263,12 +275,6 @@ final class PaperAuthenticationCommand implements CommandExecutor {
 
     private static String address(Player player) {
         return player.getAddress() == null ? "unknown" : player.getAddress().getAddress().getHostAddress();
-    }
-
-    private static String rootMessage(Throwable error) {
-        var cause = error;
-        while (cause.getCause() != null) cause = cause.getCause();
-        return cause.getMessage() == null ? "internal error" : cause.getMessage();
     }
 
     private String message(String key) {

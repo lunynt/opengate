@@ -19,8 +19,7 @@ import org.junit.jupiter.api.Test;
 class TotpEnrollmentServiceTest {
     @Test
     void persistsSecretOnlyAfterValidConfirmation() {
-        var account = new Account(
-                UUID.randomUUID(), "Player", IdentityType.OFFLINE, "hash", null, Instant.EPOCH, null, null);
+        var account = new Account(UUID.randomUUID(), "Player", IdentityType.OFFLINE, "hash", null, Instant.EPOCH);
         var repository = new MemoryRepository(account);
         var clock = Clock.fixed(Instant.ofEpochSecond(59), ZoneOffset.UTC);
         var totp = new TotpService(clock);
@@ -37,9 +36,9 @@ class TotpEnrollmentServiceTest {
         assertFalse(service.confirm(account.playerId(), "000000"));
         var code = totp.generate(secret, 1);
         assertTrue(service.confirm(account.playerId(), code));
-        assertTrue(repository.account.totpSecret().startsWith("enc:v1:"));
+        assertTrue(repository.account.totpSecret().startsWith("enc:v2:"));
         assertFalse(repository.account.totpSecret().contains(secret));
-        assertFalse(service.verify(repository.account, code));
+        assertFalse(service.verify(repository.account, code, "127.0.0.1"));
     }
 
     private static final class MemoryRepository implements AccountRepository {

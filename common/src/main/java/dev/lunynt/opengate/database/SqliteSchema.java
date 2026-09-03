@@ -2,17 +2,16 @@ package dev.lunynt.opengate.database;
 
 import java.nio.file.Path;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 
 public final class SqliteSchema {
-    public static final int CURRENT_VERSION = 4;
+    public static final int CURRENT_VERSION = 5;
 
     private SqliteSchema() {}
 
     public static void migrate(Path databaseFile) {
         var jdbcUrl = "jdbc:sqlite:" + databaseFile.toAbsolutePath();
-        try (var connection = DriverManager.getConnection(jdbcUrl)) {
+        try (var connection = SqliteConnections.open(jdbcUrl)) {
             configure(connection);
             connection.setAutoCommit(false);
             try {
@@ -25,6 +24,7 @@ public final class SqliteSchema {
                 if (version < 2) migrateToVersion2(connection);
                 if (version < 3) migrateToVersion3(connection);
                 if (version < 4) migrateToVersion4(connection);
+                if (version < 5) migrateToVersion5(connection);
                 connection.commit();
             } catch (Exception exception) {
                 connection.rollback();
@@ -40,8 +40,6 @@ public final class SqliteSchema {
     private static void configure(Connection connection) throws SQLException {
         try (var statement = connection.createStatement()) {
             statement.execute("PRAGMA journal_mode=WAL");
-            statement.execute("PRAGMA foreign_keys=ON");
-            statement.execute("PRAGMA busy_timeout=5000");
         }
     }
 
@@ -109,6 +107,14 @@ public final class SqliteSchema {
                     )
                     """);
             statement.execute("PRAGMA user_version=4");
+        }
+    }
+
+    private static void migrateToVersion5(Connection connection) throws SQLException {
+        try (var statement = connection.createStatement()) {
+            statement.executeUpdate("ALTER TABLE accounts DROP COLUMN last_authenticated_at");
+            statement.executeUpdate("ALTER TABLE accounts DROP COLUMN last_address_fingerprint");
+            statement.execute("PRAGMA user_version=5");
         }
     }
 }

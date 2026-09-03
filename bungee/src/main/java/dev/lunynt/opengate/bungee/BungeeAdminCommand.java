@@ -42,9 +42,6 @@ final class BungeeAdminCommand extends Command {
         send(sender, "UUID: " + value.playerId());
         send(sender, "Identity: " + value.identityType());
         send(sender, "Created: " + DateTimeFormatter.ISO_INSTANT.format(value.createdAt()));
-        send(sender, "Last authentication: " + (value.lastAuthenticatedAt() == null
-                ? "never"
-                : DateTimeFormatter.ISO_INSTANT.format(value.lastAuthenticatedAt())));
         send(sender, "TOTP: " + (value.totpSecret() != null ? "enabled" : "disabled"));
     }
 

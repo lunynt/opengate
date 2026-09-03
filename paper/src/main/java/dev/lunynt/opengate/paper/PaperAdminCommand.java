@@ -53,10 +53,6 @@ final class PaperAdminCommand implements CommandExecutor {
         sender.sendMessage("UUID: " + value.playerId());
         sender.sendMessage("Identity: " + value.identityType());
         sender.sendMessage("Created: " + DateTimeFormatter.ISO_INSTANT.format(value.createdAt()));
-        sender.sendMessage("Last authentication: "
-                + (value.lastAuthenticatedAt() == null
-                        ? "never"
-                        : DateTimeFormatter.ISO_INSTANT.format(value.lastAuthenticatedAt())));
         sender.sendMessage("TOTP: " + (value.totpSecret() != null ? "enabled" : "disabled"));
         return true;
     }

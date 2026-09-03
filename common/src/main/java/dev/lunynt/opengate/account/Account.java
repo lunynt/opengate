@@ -13,9 +13,7 @@ public record Account(
         IdentityType identityType,
         String passwordHash,
         String totpSecret,
-        Instant createdAt,
-        Instant lastAuthenticatedAt,
-        String lastAddressFingerprint) {
+        Instant createdAt) {
 
     public Account {
         Objects.requireNonNull(playerId, "playerId");
@@ -39,51 +37,11 @@ public record Account(
         return Optional.ofNullable(totpSecret);
     }
 
-    public Account authenticatedAt(Instant instant, String addressFingerprint) {
-        return new Account(
-                playerId,
-                username,
-                identityType,
-                passwordHash,
-                totpSecret,
-                createdAt,
-                Objects.requireNonNull(instant, "instant"),
-                Objects.requireNonNull(addressFingerprint, "addressFingerprint"));
-    }
-
     public Account withTotpSecret(String encryptedSecret) {
-        return new Account(
-                playerId,
-                username,
-                identityType,
-                passwordHash,
-                encryptedSecret,
-                createdAt,
-                lastAuthenticatedAt,
-                lastAddressFingerprint);
+        return new Account(playerId, username, identityType, passwordHash, encryptedSecret, createdAt);
     }
 
     public Account withPasswordHash(String newPasswordHash) {
-        return new Account(
-                playerId,
-                username,
-                identityType,
-                newPasswordHash,
-                totpSecret,
-                createdAt,
-                lastAuthenticatedAt,
-                lastAddressFingerprint);
-    }
-
-    public Account withoutTrustedSession() {
-        return new Account(
-                playerId,
-                username,
-                identityType,
-                passwordHash,
-                totpSecret,
-                createdAt,
-                null,
-                null);
+        return new Account(playerId, username, identityType, newPasswordHash, totpSecret, createdAt);
     }
 }

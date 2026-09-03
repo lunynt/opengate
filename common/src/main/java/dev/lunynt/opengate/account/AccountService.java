@@ -2,7 +2,6 @@ package dev.lunynt.opengate.account;
 
 import dev.lunynt.opengate.audit.AuditEventType;
 import dev.lunynt.opengate.audit.AuditLog;
-import dev.lunynt.opengate.audit.AddressFingerprint;
 import dev.lunynt.opengate.auth.IdentityType;
 import dev.lunynt.opengate.crypto.PasswordHasher;
 import java.time.Clock;
@@ -13,6 +12,9 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.HashMap;
+import java.util.function.Supplier;
 
 public final class AccountService implements AutoCloseable {
     private final AccountRepository accounts;
@@ -22,8 +24,10 @@ public final class AccountService implements AutoCloseable {
     private final int minimumPasswordLength;
     private final int maximumPasswordLength;
     private final LoginRateLimiter loginRateLimiter;
+    private final LoginRateLimiter accountRateLimiter;
+    private final LoginRateLimiter registrationRateLimiter;
     private final AuditLog auditLog;
-    private final AddressFingerprint addressFingerprint;
+    private final HashMap<String, Integer> inFlightByAddress = new HashMap<>();
 
     public AccountService(
             AccountRepository accounts,
@@ -33,8 +37,9 @@ public final class AccountService implements AutoCloseable {
             int minimumPasswordLength,
             int maximumPasswordLength,
             LoginRateLimiter loginRateLimiter,
-            AuditLog auditLog,
-            AddressFingerprint addressFingerprint) {
+            LoginRateLimiter accountRateLimiter,
+            LoginRateLimiter registrationRateLimiter,
+            AuditLog auditLog) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.passwords = Objects.requireNonNull(passwords, "passwords");
         this.cryptoExecutor = Objects.requireNonNull(cryptoExecutor, "cryptoExecutor");
@@ -42,15 +47,21 @@ public final class AccountService implements AutoCloseable {
         this.minimumPasswordLength = minimumPasswordLength;
         this.maximumPasswordLength = maximumPasswordLength;
         this.loginRateLimiter = Objects.requireNonNull(loginRateLimiter, "loginRateLimiter");
+        this.accountRateLimiter = Objects.requireNonNull(accountRateLimiter, "accountRateLimiter");
+        this.registrationRateLimiter = Objects.requireNonNull(registrationRateLimiter, "registrationRateLimiter");
         this.auditLog = Objects.requireNonNull(auditLog, "auditLog");
-        this.addressFingerprint = Objects.requireNonNull(addressFingerprint, "addressFingerprint");
     }
 
     public CompletableFuture<Account> register(
             UUID playerId, String username, IdentityType identityType, char[] password, String address) {
         validatePassword(password);
+        var addressKey = NetworkAddress.rateLimitKey(address);
+        if (registrationRateLimiter.isBlocked(addressKey)) {
+            return CompletableFuture.failedFuture(new IllegalStateException("registration rate limit exceeded"));
+        }
+        registrationRateLimiter.recordFailure(addressKey);
         var ownedPassword = Arrays.copyOf(password, password.length);
-        return CompletableFuture.supplyAsync(
+        return submit(addressKey,
                 () -> {
                     try {
                         if (accounts.findByPlayerId(playerId).isPresent()) {
@@ -63,9 +74,7 @@ public final class AccountService implements AutoCloseable {
                                 identityType,
                                 passwords.hash(ownedPassword),
                                 null,
-                                now,
-                                now,
-                                addressFingerprint.create(address));
+                                now);
                         accounts.save(account);
                         auditLog.record(
                                 AuditEventType.REGISTRATION,
@@ -77,17 +86,18 @@ public final class AccountService implements AutoCloseable {
                     } finally {
                         Arrays.fill(ownedPassword, '\0');
                     }
-                },
-                cryptoExecutor);
+                });
     }
 
     public CompletableFuture<AuthenticationResult> authenticate(
             UUID playerId, char[] password, String address) {
         var ownedPassword = Arrays.copyOf(password, password.length);
-        return CompletableFuture.supplyAsync(
+        var addressKey = NetworkAddress.rateLimitKey(address);
+        return submitAuthentication(addressKey,
                 () -> {
                     try {
-                        if (loginRateLimiter.isBlocked(address)) {
+                        var accountKey = playerId.toString();
+                        if (loginRateLimiter.isBlocked(addressKey) || accountRateLimiter.isBlocked(accountKey)) {
                             auditLog.record(AuditEventType.LOGIN_RATE_LIMITED, playerId, null, address, null);
                             return AuthenticationResult.RATE_LIMITED;
                         }
@@ -96,7 +106,8 @@ public final class AccountService implements AutoCloseable {
                             return AuthenticationResult.ACCOUNT_NOT_FOUND;
                         }
                         if (!passwords.verify(ownedPassword, account.orElseThrow().passwordHash())) {
-                            loginRateLimiter.recordFailure(address);
+                            loginRateLimiter.recordFailure(addressKey);
+                            accountRateLimiter.recordFailure(accountKey);
                             auditLog.record(
                                     AuditEventType.LOGIN_FAILURE,
                                     playerId,
@@ -105,9 +116,10 @@ public final class AccountService implements AutoCloseable {
                                     null);
                             return AuthenticationResult.WRONG_PASSWORD;
                         }
-                        loginRateLimiter.clear(address);
-                        accounts.save(account.orElseThrow()
-                                .authenticatedAt(clock.instant(), addressFingerprint.create(address)));
+                        accountRateLimiter.clear(accountKey);
+                        if (passwords.needsRehash(account.orElseThrow().passwordHash())) {
+                            accounts.updatePassword(playerId, passwords.hash(ownedPassword));
+                        }
                         auditLog.record(
                                 AuditEventType.LOGIN_SUCCESS,
                                 playerId,
@@ -118,8 +130,7 @@ public final class AccountService implements AutoCloseable {
                     } finally {
                         Arrays.fill(ownedPassword, '\0');
                     }
-                },
-                cryptoExecutor);
+                });
     }
 
     public Optional<Account> find(UUID playerId) {
@@ -133,63 +144,56 @@ public final class AccountService implements AutoCloseable {
     public CompletableFuture<AccountActionResult> changePassword(
             UUID playerId, char[] currentPassword, char[] newPassword, String address) {
         validatePassword(newPassword);
-        return authenticatedAction(playerId, currentPassword, address, account -> {
-            accounts.save(account.withPasswordHash(passwords.hash(newPassword))
-                    .authenticatedAt(clock.instant(), addressFingerprint.create(address)));
-        }, newPassword);
+        return authenticatedAction(
+                playerId,
+                currentPassword,
+                address,
+                (account, secrets) -> accounts.updatePassword(account.playerId(), passwords.hash(secrets[0])),
+                AuditEventType.PASSWORD_CHANGED,
+                newPassword);
     }
 
     public CompletableFuture<AccountActionResult> delete(
             UUID playerId, char[] currentPassword, String address) {
-        return authenticatedAction(playerId, currentPassword, address, account -> accounts.delete(playerId));
-    }
-
-    public void revokeTrustedSession(UUID playerId) {
-        accounts.findByPlayerId(playerId).ifPresent(account -> {
-            accounts.save(account.withoutTrustedSession());
-            auditLog.record(
-                    AuditEventType.SESSION_REVOKED,
-                    playerId,
-                    account.username(),
-                    null,
-                    null);
-        });
+        return authenticatedAction(
+                playerId,
+                currentPassword,
+                address,
+                (account, secrets) -> accounts.delete(playerId),
+                AuditEventType.ACCOUNT_DELETED);
     }
 
     private CompletableFuture<AccountActionResult> authenticatedAction(
             UUID playerId,
             char[] currentPassword,
             String address,
-            java.util.function.Consumer<Account> action,
+            java.util.function.BiConsumer<Account, char[][]> action,
+            AuditEventType eventType,
             char[]... additionalSecrets) {
         var ownedPassword = Arrays.copyOf(currentPassword, currentPassword.length);
         var ownedAdditional = java.util.Arrays.stream(additionalSecrets)
                 .map(value -> Arrays.copyOf(value, value.length))
                 .toArray(char[][]::new);
-        return CompletableFuture.supplyAsync(() -> {
+        var addressKey = NetworkAddress.rateLimitKey(address);
+        return submitAction(addressKey, () -> {
             try {
-                if (loginRateLimiter.isBlocked(address)) return AccountActionResult.RATE_LIMITED;
+                var accountKey = playerId.toString();
+                if (loginRateLimiter.isBlocked(addressKey) || accountRateLimiter.isBlocked(accountKey)) {
+                    return AccountActionResult.RATE_LIMITED;
+                }
                 var account = accounts.findByPlayerId(playerId);
                 if (account.isEmpty() || account.orElseThrow().passwordHash() == null) {
                     return AccountActionResult.ACCOUNT_NOT_FOUND;
                 }
                 if (!passwords.verify(ownedPassword, account.orElseThrow().passwordHash())) {
-                    loginRateLimiter.recordFailure(address);
+                    loginRateLimiter.recordFailure(addressKey);
+                    accountRateLimiter.recordFailure(accountKey);
                     return AccountActionResult.WRONG_PASSWORD;
                 }
-                loginRateLimiter.clear(address);
-                if (ownedAdditional.length == 0) {
-                    action.accept(account.orElseThrow());
-                } else {
-                    var replacement = ownedAdditional[0];
-                    accounts.save(account.orElseThrow()
-                            .withPasswordHash(passwords.hash(replacement))
-                            .authenticatedAt(clock.instant(), addressFingerprint.create(address)));
-                }
+                accountRateLimiter.clear(accountKey);
+                action.accept(account.orElseThrow(), ownedAdditional);
                 auditLog.record(
-                        ownedAdditional.length == 0
-                                ? AuditEventType.ACCOUNT_DELETED
-                                : AuditEventType.PASSWORD_CHANGED,
+                        eventType,
                         playerId,
                         account.orElseThrow().username(),
                         address,
@@ -199,15 +203,59 @@ public final class AccountService implements AutoCloseable {
                 Arrays.fill(ownedPassword, '\0');
                 for (var secret : ownedAdditional) Arrays.fill(secret, '\0');
             }
-        }, cryptoExecutor);
+        });
     }
 
-    public boolean hasTrustedSession(Account account, String address, Duration lifetime) {
-        if (account.lastAuthenticatedAt() == null || account.lastAddressFingerprint() == null) {
-            return false;
+    private <T> CompletableFuture<T> submit(String address, Supplier<T> work) {
+        if (!acquire(address)) {
+            return CompletableFuture.failedFuture(new RejectedExecutionException("address work limit exceeded"));
         }
-        return account.lastAddressFingerprint().equals(addressFingerprint.create(address))
-                && account.lastAuthenticatedAt().plus(lifetime).isAfter(clock.instant());
+        try {
+            return CompletableFuture.supplyAsync(work, cryptoExecutor)
+                    .whenComplete((result, error) -> release(address));
+        } catch (RejectedExecutionException exception) {
+            release(address);
+            return CompletableFuture.failedFuture(exception);
+        }
+    }
+
+    private CompletableFuture<AuthenticationResult> submitAuthentication(
+            String address, Supplier<AuthenticationResult> work) {
+        if (!acquire(address)) return CompletableFuture.completedFuture(AuthenticationResult.SERVICE_BUSY);
+        try {
+            return CompletableFuture.supplyAsync(work, cryptoExecutor)
+                    .whenComplete((result, error) -> release(address));
+        } catch (RejectedExecutionException exception) {
+            release(address);
+            return CompletableFuture.completedFuture(AuthenticationResult.SERVICE_BUSY);
+        }
+    }
+
+    private CompletableFuture<AccountActionResult> submitAction(String address, Supplier<AccountActionResult> work) {
+        if (!acquire(address)) return CompletableFuture.completedFuture(AccountActionResult.SERVICE_BUSY);
+        try {
+            return CompletableFuture.supplyAsync(work, cryptoExecutor)
+                    .whenComplete((result, error) -> release(address));
+        } catch (RejectedExecutionException exception) {
+            release(address);
+            return CompletableFuture.completedFuture(AccountActionResult.SERVICE_BUSY);
+        }
+    }
+
+    private synchronized boolean acquire(String address) {
+        var count = inFlightByAddress.getOrDefault(address, 0);
+        if (count >= 2) return false;
+        inFlightByAddress.put(address, count + 1);
+        return true;
+    }
+
+    private synchronized void release(String address) {
+        var count = inFlightByAddress.get(address);
+        if (count == null || count <= 1) {
+            inFlightByAddress.remove(address);
+        } else {
+            inFlightByAddress.put(address, count - 1);
+        }
     }
 
     private void validatePassword(char[] password) {

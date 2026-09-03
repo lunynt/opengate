@@ -10,8 +10,7 @@ public record ResolvedIdentity(
         IdentityType type,
         boolean registered,
         boolean passwordRequired,
-        boolean totpRequired,
-        boolean trustedSession) {
+        boolean totpRequired) {
 
     public ResolvedIdentity {
         Objects.requireNonNull(username, "username");
@@ -20,7 +19,7 @@ public record ResolvedIdentity(
         if (username.isBlank()) {
             throw new IllegalArgumentException("username must not be blank");
         }
-        if (!registered && (passwordRequired || totpRequired || trustedSession)) {
+        if (!registered && (passwordRequired || totpRequired)) {
             throw new IllegalArgumentException("an unregistered identity cannot have credentials or a session");
         }
     }
@@ -28,9 +27,6 @@ public record ResolvedIdentity(
     public Optional<AuthenticationMethod> automaticAuthentication() {
         if (type == IdentityType.FLOODGATE) {
             return Optional.of(AuthenticationMethod.PREMIUM);
-        }
-        if (trustedSession) {
-            return Optional.of(AuthenticationMethod.SESSION);
         }
         if (type == IdentityType.PREMIUM && !passwordRequired && !totpRequired) {
             return Optional.of(AuthenticationMethod.PREMIUM);

@@ -7,6 +7,8 @@ import java.util.ArrayDeque;
 import java.util.HashMap;
 
 public final class LoginRateLimiter {
+    private static final int MAXIMUM_TRACKED_KEYS = 16_384;
+
     private final int maximumFailures;
     private final Duration window;
     private final Clock clock;
@@ -30,6 +32,12 @@ public final class LoginRateLimiter {
     }
 
     public synchronized void recordFailure(String address) {
+        if (!failures.containsKey(address) && failures.size() >= MAXIMUM_TRACKED_KEYS) {
+            purgeExpired();
+            if (failures.size() >= MAXIMUM_TRACKED_KEYS) {
+                failures.remove(failures.keySet().iterator().next());
+            }
+        }
         var attempts = failures.computeIfAbsent(address, ignored -> new ArrayDeque<>());
         removeExpired(attempts);
         attempts.addLast(clock.instant());
@@ -43,6 +51,15 @@ public final class LoginRateLimiter {
         var cutoff = clock.instant().minus(window);
         while (!attempts.isEmpty() && !attempts.getFirst().isAfter(cutoff)) {
             attempts.removeFirst();
+        }
+    }
+
+    private void purgeExpired() {
+        var iterator = failures.entrySet().iterator();
+        while (iterator.hasNext()) {
+            var entry = iterator.next();
+            removeExpired(entry.getValue());
+            if (entry.getValue().isEmpty()) iterator.remove();
         }
     }
 }

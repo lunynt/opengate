@@ -50,7 +50,13 @@ public final class Argon2idPasswordHasher implements PasswordHasher {
             var memory = parseParameter(parameters[0], "m");
             var rounds = parseParameter(parameters[1], "t");
             var lanes = parseParameter(parameters[2], "p");
-            if (memory < 8_192 || memory > 1_048_576 || rounds < 1 || rounds > 20 || lanes < 1 || lanes > 16) {
+            if (memory < 8_192
+                    || memory > 131_072
+                    || rounds < 1
+                    || rounds > 6
+                    || lanes < 1
+                    || lanes > 4
+                    || (long) memory * rounds > 393_216L) {
                 return false;
             }
             var decoder = Base64.getDecoder();
@@ -63,6 +69,20 @@ public final class Argon2idPasswordHasher implements PasswordHasher {
             return MessageDigest.isEqual(expected, actual);
         } catch (IllegalArgumentException exception) {
             return false;
+        }
+    }
+
+    @Override
+    public boolean needsRehash(String encodedHash) {
+        try {
+            var parts = encodedHash.split("\\$");
+            if (parts.length != 6 || !"argon2id".equals(parts[1]) || !"v=19".equals(parts[2])) return true;
+            var parameters = parts[3].split(",");
+            return parseParameter(parameters[0], "m") != memoryKiB
+                    || parseParameter(parameters[1], "t") != iterations
+                    || parseParameter(parameters[2], "p") != parallelism;
+        } catch (RuntimeException exception) {
+            return true;
         }
     }
 

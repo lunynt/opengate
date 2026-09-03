@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class TotpEnrollmentService {
     private static final Duration ENROLLMENT_LIFETIME = Duration.ofMinutes(10);
+    private static final int MAXIMUM_PENDING_ENROLLMENTS = 4_096;
 
     private final AccountRepository accounts;
     private final TotpService totp;
@@ -35,7 +36,11 @@ public final class TotpEnrollmentService {
         this.auditLog = auditLog;
     }
 
-    public String begin(Account account) {
+    public synchronized String begin(Account account) {
+        pending.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(clock.instant()));
+        if (!pending.containsKey(account.playerId()) && pending.size() >= MAXIMUM_PENDING_ENROLLMENTS) {
+            throw new IllegalStateException("too many pending TOTP enrollments");
+        }
         var secret = totp.createSecret();
         pending.put(account.playerId(), new PendingEnrollment(secret, clock.instant().plus(ENROLLMENT_LIFETIME)));
         return totp.provisioningUri("OpenGate", account.username(), secret);
@@ -51,24 +56,30 @@ public final class TotpEnrollmentService {
             return false;
         }
         var account = accounts.findByPlayerId(playerId).orElseThrow();
-        accounts.save(account.withTotpSecret(secrets.encrypt(enrollment.secret())));
+        accounts.updateTotpSecret(playerId, secrets.encrypt(enrollment.secret()));
         accounts.claimTotpStep(playerId, totp.matchingStep(enrollment.secret(), code).orElseThrow());
         auditLog.record(AuditEventType.TOTP_ENABLED, playerId, account.username(), null, null);
         pending.remove(playerId);
         return true;
     }
 
-    public boolean verify(Account account, String code) {
-        return Optional.ofNullable(account.totpSecret())
-                .map(secrets::decrypt)
-                .map(secret -> totp.matchingStep(secret, code))
-                .filter(java.util.OptionalLong::isPresent)
-                .map(step -> accounts.claimTotpStep(account.playerId(), step.orElseThrow()))
-                .orElse(false);
+    public boolean verify(Account account, String code, String address) {
+        var encrypted = account.totpSecret();
+        if (encrypted == null) return false;
+        var secret = secrets.decrypt(encrypted);
+        var step = totp.matchingStep(secret, code);
+        var verified = step.isPresent() && accounts.claimTotpStep(account.playerId(), step.orElseThrow());
+        if (verified && secrets.isLegacy(encrypted)) {
+            accounts.updateTotpSecret(account.playerId(), secrets.encrypt(secret));
+        }
+        if (!verified) {
+            auditLog.record(AuditEventType.TOTP_FAILURE, account.playerId(), account.username(), address, null);
+        }
+        return verified;
     }
 
     public void disable(Account account) {
-        accounts.save(account.withTotpSecret(null));
+        accounts.updateTotpSecret(account.playerId(), null);
         pending.remove(account.playerId());
         auditLog.record(
                 AuditEventType.TOTP_DISABLED,

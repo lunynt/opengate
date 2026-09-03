@@ -1,5 +1,6 @@
 plugins {
     java
+    id("com.gradleup.shadow") version "9.6.1" apply false
 }
 
 allprojects {
@@ -30,6 +31,12 @@ subprojects {
     tasks.withType<JavaCompile>().configureEach {
         options.release = 25
         options.encoding = "UTF-8"
+        options.compilerArgs.addAll(listOf("-Xlint:all,-processing", "-Werror"))
+    }
+
+    tasks.withType<AbstractArchiveTask>().configureEach {
+        isPreserveFileTimestamps = false
+        isReproducibleFileOrder = true
     }
 
     tasks.withType<Test>().configureEach {

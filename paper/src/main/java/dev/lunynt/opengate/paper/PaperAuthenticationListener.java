@@ -181,6 +181,6 @@ final class PaperAuthenticationListener implements Listener {
     }
 
     private String message(String key) {
-        return plugin.openGate().messages().get(key);
+        return org.bukkit.ChatColor.translateAlternateColorCodes('&', plugin.openGate().messages().get(key));
     }
 }

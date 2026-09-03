@@ -263,6 +263,6 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
     }
 
     private Component message(String key) {
-        return Component.text(plugin.openGate().messages().get(key));
+        return plugin.message(key);
     }
 }

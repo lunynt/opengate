@@ -4,6 +4,7 @@ import dev.lunynt.opengate.OpenGate;
 import dev.lunynt.opengate.auth.AuthenticationState;
 import java.util.concurrent.TimeUnit;
 import net.md_5.bungee.api.ProxyServer;
+import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.plugin.Plugin;
@@ -53,8 +54,8 @@ public final class OpenGateBungeePlugin extends Plugin {
         }, openGate.config().authenticationTimeout().toMillis(), TimeUnit.MILLISECONDS);
     }
 
-    TextComponent message(String key) {
-        return new TextComponent(openGate.messages().get(key));
+    BaseComponent message(String key) {
+        return TextComponent.fromLegacy(openGate.messages().get(key).replace('&', '§'));
     }
 
     ProxyServer proxy() {

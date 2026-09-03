@@ -10,6 +10,7 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import dev.lunynt.opengate.OpenGate;
 import java.nio.file.Path;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.slf4j.Logger;
 
 @Plugin(
@@ -88,10 +89,14 @@ public final class OpenGateVelocityPlugin {
                                     .map(session -> session.state()
                                             != dev.lunynt.opengate.auth.AuthenticationState.RELEASED)
                                     .orElse(true)) {
-                        player.disconnect(Component.text(openGate.messages().get("authentication-timeout")));
+                        player.disconnect(message("authentication-timeout"));
                     }
                 })
                 .delay(openGate.config().authenticationTimeout())
                 .schedule();
+    }
+
+    Component message(String key) {
+        return LegacyComponentSerializer.legacyAmpersand().deserialize(openGate.messages().get(key));
     }
 }

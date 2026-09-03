@@ -66,7 +66,7 @@ Authenticated players can manage their account with:
 
 Password changes and deletion run Argon2id verification outside the server thread. Logout revokes the persisted trusted session, while deletion removes the account and immediately closes the active authentication session.
 
-On first launch OpenGate creates `config.properties`, `messages.properties`, `opengate.db`, and `secret.key`. Authentication timing, password bounds, IP limits, premium lookup, authentication routing, lobby order, and player messages can be changed without rebuilding. Use `proxy-auth-server` and the comma-separated `proxy-lobby-servers` list when server names differ. Older Velocity-specific property names remain compatible.
+On first launch OpenGate creates `config.properties`, `messages.properties`, `opengate.db`, and `secret.key`. Authentication timing, password bounds, IP limits, premium lookup, authentication routing, lobby order, and player messages can be changed without rebuilding. Messages support standard `&` color codes on every platform. Use `proxy-auth-server` and the comma-separated `proxy-lobby-servers` list when server names differ. Older Velocity-specific property names remain compatible.
 
 Standard SQLite JDBC does not include portable database encryption, so OpenGate does not present the database as password-protected. Passwords are one-way Argon2id hashes, TOTP secrets use AES-256-GCM, trusted addresses use keyed HMAC fingerprints, and POSIX storage is restricted to its owner. Back up `opengate.db` and `secret.key` together and keep filesystem access private.
 

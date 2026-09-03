@@ -17,6 +17,15 @@ class MojangProfileLookupTest {
     }
 
     @Test
+    void parsesProfileFieldsRegardlessOfJsonOrder() {
+        var result = MojangProfileLookup.parse(
+                "{\"name\":\"Player\",\"ignored\":true,\"id\":\"123456781234123412341234567890ab\"}");
+
+        assertEquals(ProfileLookupResult.Status.FOUND, result.status());
+        assertEquals("Player", result.profile().username());
+    }
+
+    @Test
     void rejectsMalformedSuccessfulResponse() {
         assertEquals(ProfileLookupResult.Status.UNAVAILABLE, MojangProfileLookup.parse("{}").status());
     }

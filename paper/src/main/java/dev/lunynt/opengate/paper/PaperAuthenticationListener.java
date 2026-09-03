@@ -10,17 +10,27 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerCommandSendEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 
 final class PaperAuthenticationListener implements Listener {
-    private static final Set<String> ALLOWED_COMMANDS = Set.of("login", "l", "register", "reg", "totp", "2fa");
+    private static final Set<String> ALLOWED_COMMANDS = Set.of("login", "l", "register", "reg", "totp");
 
     private final OpenGatePaperPlugin plugin;
 
@@ -29,7 +39,9 @@ final class PaperAuthenticationListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
+    @SuppressWarnings("deprecation")
     public void onJoin(PlayerJoinEvent event) {
+        event.setJoinMessage(null);
         var player = event.getPlayer();
         var playerId = player.getUniqueId();
         var address = player.getAddress() == null ? "unknown" : player.getAddress().getAddress().getHostAddress();
@@ -42,7 +54,9 @@ final class PaperAuthenticationListener implements Listener {
                         player,
                         session,
                         account,
-                        plugin.getServer().getOnlineMode() ? IdentityType.PREMIUM : IdentityType.OFFLINE));
+                        plugin.floodgate().isPlayer(playerId)
+                                ? IdentityType.FLOODGATE
+                                : plugin.getServer().getOnlineMode() ? IdentityType.PREMIUM : IdentityType.OFFLINE));
             } catch (RuntimeException exception) {
                 plugin.getLogger().severe("Could not load account for " + player.getName() + ": " + exception.getMessage());
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
@@ -95,6 +109,7 @@ final class PaperAuthenticationListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
+        if (isBlocked(event.getPlayer().getUniqueId())) event.setQuitMessage(null);
         plugin.openGate().sessions().close(event.getPlayer().getUniqueId());
     }
 
@@ -110,7 +125,7 @@ final class PaperAuthenticationListener implements Listener {
         if (!isBlocked(event.getPlayer().getUniqueId())) {
             return;
         }
-        var command = event.getMessage().substring(1).split(" ", 2)[0].toLowerCase(java.util.Locale.ROOT);
+        var command = normalizeCommand(event.getMessage().substring(1).split(" ", 2)[0]);
         if (!ALLOWED_COMMANDS.contains(command)) {
             event.setCancelled(true);
             event.getPlayer().sendMessage(message("authenticate-first"));
@@ -128,8 +143,25 @@ final class PaperAuthenticationListener implements Listener {
     }
 
     @EventHandler(ignoreCancelled = true)
+    public void onInteractEntity(PlayerInteractEntityEvent event) {
+        if (isBlocked(event.getPlayer().getUniqueId())) event.setCancelled(true);
+    }
+
+    @EventHandler(ignoreCancelled = true)
     public void onInventory(InventoryClickEvent event) {
         if (event.getWhoClicked() instanceof org.bukkit.entity.Player player
+                && isBlocked(player.getUniqueId())) event.setCancelled(true);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (event.getWhoClicked() instanceof org.bukkit.entity.Player player
+                && isBlocked(player.getUniqueId())) event.setCancelled(true);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onInventoryOpen(InventoryOpenEvent event) {
+        if (event.getPlayer() instanceof org.bukkit.entity.Player player
                 && isBlocked(player.getUniqueId())) event.setCancelled(true);
     }
 
@@ -154,6 +186,44 @@ final class PaperAuthenticationListener implements Listener {
                 && isBlocked(player.getUniqueId())) event.setCancelled(true);
     }
 
+    @EventHandler(ignoreCancelled = true)
+    public void onOutgoingDamage(EntityDamageByEntityEvent event) {
+        var attacker = event.getDamager() instanceof org.bukkit.entity.Player player
+                ? player
+                : event.getDamager() instanceof Projectile projectile
+                        && projectile.getShooter() instanceof org.bukkit.entity.Player player
+                                ? player
+                                : null;
+        if (attacker != null && isBlocked(attacker.getUniqueId())) event.setCancelled(true);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPickup(EntityPickupItemEvent event) {
+        if (event.getEntity() instanceof org.bukkit.entity.Player player
+                && isBlocked(player.getUniqueId())) event.setCancelled(true);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onHeldItem(PlayerItemHeldEvent event) {
+        if (isBlocked(event.getPlayer().getUniqueId())) event.setCancelled(true);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onSwapHands(PlayerSwapHandItemsEvent event) {
+        if (isBlocked(event.getPlayer().getUniqueId())) event.setCancelled(true);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onTeleport(PlayerTeleportEvent event) {
+        if (isBlocked(event.getPlayer().getUniqueId())) event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onCommandsSent(PlayerCommandSendEvent event) {
+        if (!isBlocked(event.getPlayer().getUniqueId())) return;
+        event.getCommands().removeIf(command -> !ALLOWED_COMMANDS.contains(normalizeCommand(command)));
+    }
+
     private boolean isBlocked(java.util.UUID playerId) {
         return plugin.openGate()
                 .sessions()
@@ -170,6 +240,12 @@ final class PaperAuthenticationListener implements Listener {
                         || from.getBlockX() != to.getBlockX()
                         || from.getBlockY() != to.getBlockY()
                         || from.getBlockZ() != to.getBlockZ());
+    }
+
+    private static String normalizeCommand(String command) {
+        var separator = command.indexOf(':');
+        var name = separator >= 0 ? command.substring(separator + 1) : command;
+        return name.toLowerCase(java.util.Locale.ROOT);
     }
 
     private String message(String key) {

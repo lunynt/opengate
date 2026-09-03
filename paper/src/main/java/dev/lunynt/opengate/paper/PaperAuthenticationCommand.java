@@ -55,7 +55,7 @@ final class PaperAuthenticationCommand implements CommandExecutor {
                 .accounts()
                 .register(player.getUniqueId(), player.getName(), IdentityType.OFFLINE, password, address)
                 .whenComplete((account, error) -> plugin.getServer().getScheduler().runTask(plugin, () -> {
-                    if (!player.isOnline()) return;
+                    if (!isCurrent(player, session)) return;
                     if (error != null) {
                         session.registrationFailed();
                         plugin.getLogger().warning("Registration failed for " + player.getName());
@@ -85,7 +85,7 @@ final class PaperAuthenticationCommand implements CommandExecutor {
         session.beginPasswordVerification();
         plugin.openGate().accounts().authenticate(player.getUniqueId(), password, address).whenComplete((result, error) ->
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
-                    if (!player.isOnline()) return;
+                    if (!isCurrent(player, session)) return;
                     if (result == AuthenticationResult.RATE_LIMITED) {
                         session.close();
                         player.kickPlayer(message("rate-limited"));
@@ -122,24 +122,41 @@ final class PaperAuthenticationCommand implements CommandExecutor {
             return true;
         }
         var session = plugin.openGate().sessions().find(player.getUniqueId()).orElse(null);
-        var account = plugin.openGate().accounts().find(player.getUniqueId()).orElse(null);
-        if (session == null || account == null || session.state() != AuthenticationState.AWAITING_TOTP) {
+        if (session == null || session.state() != AuthenticationState.AWAITING_TOTP) {
             player.sendMessage("Two-factor authentication is not required.");
             return true;
         }
         session.beginTotpVerification();
-        if (!plugin.openGate().totp().verify(account, arguments[0], address(player))) {
+        var code = arguments[0];
+        var clientAddress = address(player);
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            boolean verified;
+            try {
+                var account = plugin.openGate().accounts().find(player.getUniqueId()).orElse(null);
+                verified = account != null && plugin.openGate().totp().verify(account, code, clientAddress);
+            } catch (RuntimeException exception) {
+                verified = false;
+            }
+            var result = verified;
+            plugin.getServer().getScheduler().runTask(plugin, () -> finishTotp(player, session, result));
+        });
+        return true;
+    }
+
+    private void finishTotp(
+            Player player, dev.lunynt.opengate.auth.AuthenticationSession session, boolean verified) {
+        if (!player.isOnline() || plugin.openGate().sessions().find(player.getUniqueId()).orElse(null) != session) return;
+        if (!verified) {
             if (session.rejectTotp(plugin.openGate().config().maximumLoginAttempts())) {
                 player.kickPlayer(message("too-many-attempts"));
             } else {
                 player.sendMessage(message("totp-invalid"));
             }
-            return true;
+            return;
         }
         session.acceptTotp();
         session.release();
         player.sendMessage(message("totp-success"));
-        return true;
     }
 
     private boolean manageTotp(Player player, String[] arguments) {
@@ -149,22 +166,32 @@ final class PaperAuthenticationCommand implements CommandExecutor {
         }
         return switch (arguments[0].toLowerCase(java.util.Locale.ROOT)) {
             case "setup" -> verifyPasswordThen(player, arguments, () -> {
-                var account = plugin.openGate().accounts().find(player.getUniqueId()).orElseThrow();
-                var uri = plugin.openGate().totp().begin(account);
-                player.sendMessage(message("totp-setup") + " " + uri);
+                plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                    var account = plugin.openGate().accounts().find(player.getUniqueId()).orElseThrow();
+                    var uri = plugin.openGate().totp().begin(account);
+                    plugin.getServer().getScheduler().runTask(plugin, () ->
+                            player.sendMessage(message("totp-setup") + " " + uri));
+                });
             });
             case "confirm" -> {
-                if (arguments.length != 2 || !plugin.openGate().totp().confirm(player.getUniqueId(), arguments[1])) {
+                if (arguments.length != 2) {
                     player.sendMessage(message("totp-invalid"));
-                } else {
-                    player.sendMessage(message("totp-enabled"));
+                    yield true;
                 }
+                plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                    var confirmed = plugin.openGate().totp().confirm(player.getUniqueId(), arguments[1]);
+                    plugin.getServer().getScheduler().runTask(plugin, () ->
+                            player.sendMessage(message(confirmed ? "totp-enabled" : "totp-invalid")));
+                });
                 yield true;
             }
             case "disable" -> verifyPasswordThen(player, arguments, () -> {
-                var account = plugin.openGate().accounts().find(player.getUniqueId()).orElseThrow();
-                plugin.openGate().totp().disable(account);
-                player.sendMessage(message("totp-disabled"));
+                plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                    var account = plugin.openGate().accounts().find(player.getUniqueId()).orElseThrow();
+                    plugin.openGate().totp().disable(account);
+                    plugin.getServer().getScheduler().runTask(plugin, () ->
+                            player.sendMessage(message("totp-disabled")));
+                });
             });
             default -> {
                 player.sendMessage("Usage: /2fa setup <password> | confirm <code> | disable <password>");
@@ -197,6 +224,11 @@ final class PaperAuthenticationCommand implements CommandExecutor {
         return plugin.openGate().sessions().find(player.getUniqueId())
                 .map(session -> session.state() == AuthenticationState.RELEASED)
                 .orElse(false);
+    }
+
+    private boolean isCurrent(Player player, dev.lunynt.opengate.auth.AuthenticationSession session) {
+        return player.isOnline()
+                && plugin.openGate().sessions().find(player.getUniqueId()).orElse(null) == session;
     }
 
     private boolean manageAccount(Player player, String[] arguments) {

@@ -30,12 +30,14 @@ final class VelocityAdminCommand implements SimpleCommand {
         var actor = invocation.source() instanceof Player player
                 ? player.getUniqueId().toString()
                 : "console";
-        switch (arguments[0].toLowerCase(java.util.Locale.ROOT)) {
-            case "lookup" -> lookup(invocation.source(), arguments[1], actor);
-            case "audit" -> audit(invocation.source(), arguments, actor);
-            case "revoke" -> revoke(invocation.source(), arguments[1], actor);
-            default -> usage(invocation.source());
-        }
+        plugin.server().getScheduler().buildTask(plugin, () -> {
+            switch (arguments[0].toLowerCase(java.util.Locale.ROOT)) {
+                case "lookup" -> lookup(invocation.source(), arguments[1], actor);
+                case "audit" -> audit(invocation.source(), arguments, actor);
+                case "revoke" -> revoke(invocation.source(), arguments[1], actor);
+                default -> usage(invocation.source());
+            }
+        }).schedule();
     }
 
     @Override
@@ -57,7 +59,7 @@ final class VelocityAdminCommand implements SimpleCommand {
         source.sendMessage(Component.text("UUID: " + value.playerId()));
         source.sendMessage(Component.text("Identity: " + value.identityType()));
         source.sendMessage(Component.text("Created: " + DateTimeFormatter.ISO_INSTANT.format(value.createdAt())));
-        source.sendMessage(Component.text("TOTP: " + (value.totpSecret() != null ? "enabled" : "disabled")));
+        source.sendMessage(Component.text("TOTP: " + (value.totpEnabled() ? "enabled" : "disabled")));
     }
 
     private void audit(CommandSource source, String[] arguments, String actor) {

@@ -13,12 +13,13 @@ import net.md_5.bungee.api.event.PlayerDisconnectEvent;
 import net.md_5.bungee.api.event.PostLoginEvent;
 import net.md_5.bungee.api.event.PreLoginEvent;
 import net.md_5.bungee.api.event.ServerConnectEvent;
+import net.md_5.bungee.api.event.TabCompleteEvent;
 import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.event.EventHandler;
 import net.md_5.bungee.event.EventPriority;
 
 final class BungeeAuthenticationListener implements Listener {
-    private static final Set<String> ALLOWED_COMMANDS = Set.of("login", "l", "register", "reg", "totp", "2fa");
+    private static final Set<String> ALLOWED_COMMANDS = Set.of("login", "l", "register", "reg", "totp");
 
     private final OpenGateBungeePlugin plugin;
 
@@ -32,6 +33,10 @@ final class BungeeAuthenticationListener implements Listener {
         event.registerIntent(plugin);
         plugin.proxy().getScheduler().runAsync(plugin, () -> {
             try {
+                if (plugin.floodgate().isUsername(event.getConnection().getName())) {
+                    event.getConnection().setOnlineMode(false);
+                    return;
+                }
                 switch (plugin.openGate().identities().resolve(event.getConnection().getName())) {
                     case ONLINE -> event.getConnection().setOnlineMode(true);
                     case OFFLINE -> event.getConnection().setOnlineMode(false);
@@ -86,11 +91,25 @@ final class BungeeAuthenticationListener implements Listener {
         if (!(event.getSender() instanceof ProxiedPlayer player) || !isBlocked(player.getUniqueId())) return;
         var value = event.getMessage();
         if (value.startsWith("/")) {
-            var command = value.substring(1).split(" ", 2)[0].toLowerCase(Locale.ROOT);
+            var command = normalizeCommand(value.substring(1).split(" ", 2)[0]);
             if (ALLOWED_COMMANDS.contains(command)) return;
         }
         event.setCancelled(true);
         player.sendMessage(plugin.message("authenticate-first"));
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onTabComplete(TabCompleteEvent event) {
+        if (event.getSender() instanceof ProxiedPlayer player && isBlocked(player.getUniqueId())) {
+            event.setCancelled(true);
+            event.getSuggestions().clear();
+        }
+    }
+
+    private static String normalizeCommand(String command) {
+        var separator = command.indexOf(':');
+        var name = separator >= 0 ? command.substring(separator + 1) : command;
+        return name.toLowerCase(Locale.ROOT);
     }
 
     private void initialize(ProxiedPlayer player) {
@@ -103,7 +122,9 @@ final class BungeeAuthenticationListener implements Listener {
         session.resolve(new ResolvedIdentity(
                 player.getName(),
                 playerId,
-                player.getPendingConnection().isOnlineMode() ? IdentityType.PREMIUM : IdentityType.OFFLINE,
+                plugin.floodgate().isPlayer(playerId)
+                        ? IdentityType.FLOODGATE
+                        : player.getPendingConnection().isOnlineMode() ? IdentityType.PREMIUM : IdentityType.OFFLINE,
                 account.isPresent(),
                 account.map(value -> value.passwordHash() != null).orElse(false),
                 account.map(value -> value.totpSecret() != null).orElse(false)));

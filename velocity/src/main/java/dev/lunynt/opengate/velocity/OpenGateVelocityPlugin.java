@@ -5,9 +5,12 @@ import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
+import com.velocitypowered.api.plugin.Dependency;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import dev.lunynt.opengate.OpenGate;
+import dev.lunynt.opengate.identity.FloodgateApiIdentity;
+import dev.lunynt.opengate.identity.FloodgateIdentity;
 import java.nio.file.Path;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -17,12 +20,14 @@ import org.slf4j.Logger;
         id = "opengate",
         name = "OpenGate",
         version = "0.1.0-SNAPSHOT",
-        description = "Authentication gateway for Paper and Velocity")
+        description = "Authentication gateway for Paper and Velocity",
+        dependencies = {@Dependency(id = "floodgate", optional = true)})
 public final class OpenGateVelocityPlugin {
     private final Logger logger;
     private final Path dataDirectory;
     private final ProxyServer server;
     private OpenGate openGate;
+    private FloodgateIdentity floodgate = FloodgateIdentity.unavailable();
 
     @Inject
     public OpenGateVelocityPlugin(Logger logger, @DataDirectory Path dataDirectory, ProxyServer server) {
@@ -34,6 +39,14 @@ public final class OpenGateVelocityPlugin {
     @Subscribe
     public void onProxyInitialize(ProxyInitializeEvent event) {
         openGate = OpenGate.create(dataDirectory);
+        if (server.getPluginManager().isLoaded("floodgate")) {
+            try {
+                floodgate = new FloodgateApiIdentity();
+                logger.info("Floodgate integration enabled");
+            } catch (LinkageError | RuntimeException exception) {
+                logger.warn("Floodgate API unavailable; Bedrock authentication will fail closed");
+            }
+        }
         server.getEventManager().register(this, new VelocityAuthenticationListener(this));
         var commandManager = server.getCommandManager();
         commandManager.register(
@@ -63,6 +76,10 @@ public final class OpenGateVelocityPlugin {
 
     ProxyServer server() {
         return server;
+    }
+
+    FloodgateIdentity floodgate() {
+        return floodgate;
     }
 
     void connectToLobby(com.velocitypowered.api.proxy.Player player) {

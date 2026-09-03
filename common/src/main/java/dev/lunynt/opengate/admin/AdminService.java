@@ -1,6 +1,5 @@
 package dev.lunynt.opengate.admin;
 
-import dev.lunynt.opengate.account.Account;
 import dev.lunynt.opengate.account.AccountService;
 import dev.lunynt.opengate.audit.AuditEventType;
 import dev.lunynt.opengate.audit.AuditLog;
@@ -20,15 +19,15 @@ public final class AdminService {
         this.auditLog = auditLog;
     }
 
-    public Optional<Account> lookup(String username, String actor) {
+    public Optional<AccountSummary> lookup(String username, String actor) {
         var account = accounts.find(username);
         auditLog.record(
                 AuditEventType.ADMIN_ACCOUNT_LOOKUP,
-                account.map(Account::playerId).orElse(null),
+                account.map(value -> value.playerId()).orElse(null),
                 username,
                 null,
                 actorDetail(actor));
-        return account;
+        return account.map(AdminService::summary);
     }
 
     public List<AuditRecord> audit(String username, int limit, String actor) {
@@ -43,7 +42,7 @@ public final class AdminService {
         return auditLog.recent(account.playerId(), limit);
     }
 
-    public Optional<Account> revoke(String username, String actor) {
+    public Optional<AccountSummary> revoke(String username, String actor) {
         var account = accounts.find(username);
         account.ifPresent(value -> {
             sessions.close(value.playerId());
@@ -54,7 +53,16 @@ public final class AdminService {
                     null,
                     actorDetail(actor));
         });
-        return account;
+        return account.map(AdminService::summary);
+    }
+
+    private static AccountSummary summary(dev.lunynt.opengate.account.Account account) {
+        return new AccountSummary(
+                account.playerId(),
+                account.username(),
+                account.identityType(),
+                account.createdAt(),
+                account.totpSecret() != null);
     }
 
     private static String actorDetail(String actor) {

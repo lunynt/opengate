@@ -1,6 +1,8 @@
 package dev.lunynt.opengate.bungee;
 
 import dev.lunynt.opengate.OpenGate;
+import dev.lunynt.opengate.identity.FloodgateApiIdentity;
+import dev.lunynt.opengate.identity.FloodgateIdentity;
 import dev.lunynt.opengate.auth.AuthenticationState;
 import java.util.concurrent.TimeUnit;
 import net.md_5.bungee.api.ProxyServer;
@@ -11,10 +13,19 @@ import net.md_5.bungee.api.plugin.Plugin;
 
 public final class OpenGateBungeePlugin extends Plugin {
     private OpenGate openGate;
+    private FloodgateIdentity floodgate = FloodgateIdentity.unavailable();
 
     @Override
     public void onEnable() {
         openGate = OpenGate.create(getDataFolder().toPath());
+        if (getProxy().getPluginManager().getPlugin("floodgate") != null) {
+            try {
+                floodgate = new FloodgateApiIdentity();
+                getLogger().info("Floodgate integration enabled");
+            } catch (LinkageError | RuntimeException exception) {
+                getLogger().warning("Floodgate API unavailable; Bedrock authentication will fail closed");
+            }
+        }
         var plugins = getProxy().getPluginManager();
         plugins.registerListener(this, new BungeeAuthenticationListener(this));
         plugins.registerCommand(this, new BungeeAuthenticationCommand(this, "login", "l"));
@@ -60,5 +71,9 @@ public final class OpenGateBungeePlugin extends Plugin {
 
     ProxyServer proxy() {
         return getProxy();
+    }
+
+    FloodgateIdentity floodgate() {
+        return floodgate;
     }
 }

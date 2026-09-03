@@ -56,7 +56,7 @@ final class BungeeAuthenticationCommand extends Command {
                             password,
                             BungeeAuthenticationListener.address(player))
                     .whenComplete((account, error) -> {
-                        if (!player.isConnected()) return;
+                        if (!isCurrent(player, session)) return;
                         if (error != null) {
                             session.registrationFailed();
                             send(player, plugin.openGate().messages().get("account-action-failed"));
@@ -98,7 +98,7 @@ final class BungeeAuthenticationCommand extends Command {
             dev.lunynt.opengate.auth.AuthenticationSession session,
             AuthenticationResult result,
             Throwable error) {
-        if (!player.isConnected()) return;
+        if (!isCurrent(player, session)) return;
         if (result == AuthenticationResult.RATE_LIMITED) {
             session.close();
             player.disconnect(plugin.message("rate-limited"));
@@ -273,6 +273,12 @@ final class BungeeAuthenticationCommand extends Command {
         return plugin.openGate().sessions().find(player.getUniqueId())
                 .map(session -> session.state() == AuthenticationState.RELEASED)
                 .orElse(false);
+    }
+
+    private boolean isCurrent(
+            ProxiedPlayer player, dev.lunynt.opengate.auth.AuthenticationSession session) {
+        return player.isConnected()
+                && plugin.openGate().sessions().find(player.getUniqueId()).orElse(null) == session;
     }
 
     private static void send(CommandSender sender, String message) {

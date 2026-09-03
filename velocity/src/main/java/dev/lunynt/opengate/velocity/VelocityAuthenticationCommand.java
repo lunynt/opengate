@@ -58,7 +58,7 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
                 .accounts()
                 .register(player.getUniqueId(), player.getUsername(), IdentityType.OFFLINE, password, address)
                 .whenComplete((account, error) -> {
-                    if (!player.isActive()) return;
+                    if (!isCurrent(player, session)) return;
                     if (error != null) {
                         session.registrationFailed();
                         player.sendMessage(message("account-action-failed"));
@@ -86,7 +86,7 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
         var address = player.getRemoteAddress().getAddress().getHostAddress();
         session.beginPasswordVerification();
         plugin.openGate().accounts().authenticate(player.getUniqueId(), password, address).whenComplete((result, error) -> {
-            if (!player.isActive()) return;
+            if (!isCurrent(player, session)) return;
             if (result == AuthenticationResult.RATE_LIMITED) {
                 session.close();
                 player.disconnect(message("rate-limited"));
@@ -123,24 +123,29 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
             return;
         }
         var session = plugin.openGate().sessions().find(player.getUniqueId()).orElse(null);
-        var account = plugin.openGate().accounts().find(player.getUniqueId()).orElse(null);
-        if (session == null || account == null || session.state() != AuthenticationState.AWAITING_TOTP) {
+        if (session == null || session.state() != AuthenticationState.AWAITING_TOTP) {
             player.sendMessage(Component.text("Two-factor authentication is not required."));
             return;
         }
         session.beginTotpVerification();
-        if (!plugin.openGate().totp().verify(account, arguments[0], address(player))) {
-            if (session.rejectTotp(plugin.openGate().config().maximumLoginAttempts())) {
-                player.disconnect(message("too-many-attempts"));
-            } else {
-                player.sendMessage(message("totp-invalid"));
+        var code = arguments[0];
+        plugin.server().getScheduler().buildTask(plugin, () -> {
+            var account = plugin.openGate().accounts().find(player.getUniqueId()).orElse(null);
+            var verified = account != null && plugin.openGate().totp().verify(account, code, address(player));
+            if (!player.isActive() || plugin.openGate().sessions().find(player.getUniqueId()).orElse(null) != session) return;
+            if (!verified) {
+                if (session.rejectTotp(plugin.openGate().config().maximumLoginAttempts())) {
+                    player.disconnect(message("too-many-attempts"));
+                } else {
+                    player.sendMessage(message("totp-invalid"));
+                }
+                return;
             }
-            return;
-        }
-        session.acceptTotp();
-        session.release();
-        player.sendMessage(message("totp-success"));
-        plugin.connectToLobby(player);
+            session.acceptTotp();
+            session.release();
+            player.sendMessage(message("totp-success"));
+            plugin.connectToLobby(player);
+        }).schedule();
     }
 
     private void manageTotp(Player player, String[] arguments) {
@@ -156,11 +161,14 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
                         Component.text(uri).clickEvent(net.kyori.adventure.text.event.ClickEvent.copyToClipboard(uri))));
             });
             case "confirm" -> {
-                if (arguments.length != 2 || !plugin.openGate().totp().confirm(player.getUniqueId(), arguments[1])) {
+                if (arguments.length != 2) {
                     player.sendMessage(message("totp-invalid"));
-                } else {
-                    player.sendMessage(message("totp-enabled"));
+                    return;
                 }
+                plugin.server().getScheduler().buildTask(plugin, () -> {
+                    var confirmed = plugin.openGate().totp().confirm(player.getUniqueId(), arguments[1]);
+                    player.sendMessage(message(confirmed ? "totp-enabled" : "totp-invalid"));
+                }).schedule();
             }
             case "disable" -> verifyPasswordThen(player, arguments, () -> {
                 var account = plugin.openGate().accounts().find(player.getUniqueId()).orElseThrow();
@@ -194,6 +202,11 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
         return plugin.openGate().sessions().find(player.getUniqueId())
                 .map(session -> session.state() == AuthenticationState.RELEASED)
                 .orElse(false);
+    }
+
+    private boolean isCurrent(Player player, dev.lunynt.opengate.auth.AuthenticationSession session) {
+        return player.isActive()
+                && plugin.openGate().sessions().find(player.getUniqueId()).orElse(null) == session;
     }
 
     private void manageAccount(Player player, String[] arguments) {

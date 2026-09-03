@@ -42,7 +42,7 @@ final class BungeeAdminCommand extends Command {
         send(sender, "UUID: " + value.playerId());
         send(sender, "Identity: " + value.identityType());
         send(sender, "Created: " + DateTimeFormatter.ISO_INSTANT.format(value.createdAt()));
-        send(sender, "TOTP: " + (value.totpSecret() != null ? "enabled" : "disabled"));
+        send(sender, "TOTP: " + (value.totpEnabled() ? "enabled" : "disabled"));
     }
 
     private void audit(CommandSender sender, String[] arguments, String actor) {

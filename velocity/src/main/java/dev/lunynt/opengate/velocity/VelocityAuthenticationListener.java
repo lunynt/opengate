@@ -7,6 +7,8 @@ import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
+import com.velocitypowered.api.event.player.PlayerChatEvent;
+import com.velocitypowered.api.event.player.TabCompleteEvent;
 import dev.lunynt.opengate.auth.AuthenticationState;
 import dev.lunynt.opengate.auth.IdentityType;
 import dev.lunynt.opengate.auth.ResolvedIdentity;
@@ -15,7 +17,7 @@ import java.util.Set;
 import net.kyori.adventure.text.Component;
 
 final class VelocityAuthenticationListener {
-    private static final Set<String> ALLOWED_COMMANDS = Set.of("login", "l", "register", "reg", "totp", "2fa");
+    private static final Set<String> ALLOWED_COMMANDS = Set.of("login", "l", "register", "reg", "totp");
 
     private final OpenGateVelocityPlugin plugin;
 
@@ -30,6 +32,10 @@ final class VelocityAuthenticationListener {
         }
         return EventTask.async(() -> {
             try {
+                if (plugin.floodgate().isUsername(event.getUsername())) {
+                    event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
+                    return;
+                }
                 var decision = plugin.openGate().identities().resolve(event.getUsername());
                 event.setResult(switch (decision) {
                     case ONLINE -> PreLoginEvent.PreLoginComponentResult.forceOnlineMode();
@@ -62,7 +68,9 @@ final class VelocityAuthenticationListener {
         session.resolve(new ResolvedIdentity(
                 player.getUsername(),
                 playerId,
-                player.isOnlineMode() ? IdentityType.PREMIUM : IdentityType.OFFLINE,
+                plugin.floodgate().isPlayer(playerId)
+                        ? IdentityType.FLOODGATE
+                        : player.isOnlineMode() ? IdentityType.PREMIUM : IdentityType.OFFLINE,
                 account.isPresent(),
                 account.map(value -> value.passwordHash() != null).orElse(false),
                 account.map(value -> value.totpSecret() != null).orElse(false)));
@@ -102,11 +110,30 @@ final class VelocityAuthenticationListener {
                 || !isBlocked(player.getUniqueId())) {
             return;
         }
-        var command = event.getCommand().split(" ", 2)[0].toLowerCase(Locale.ROOT);
+        var command = normalizeCommand(event.getCommand().split(" ", 2)[0]);
         if (!ALLOWED_COMMANDS.contains(command)) {
             event.setResult(CommandExecuteEvent.CommandResult.denied());
             player.sendMessage(message("authenticate-first"));
         }
+    }
+
+    @Subscribe
+    @SuppressWarnings("deprecation")
+    public void onChat(PlayerChatEvent event) {
+        if (isBlocked(event.getPlayer().getUniqueId())) {
+            event.setResult(PlayerChatEvent.ChatResult.denied());
+        }
+    }
+
+    @Subscribe
+    public void onTabComplete(TabCompleteEvent event) {
+        if (isBlocked(event.getPlayer().getUniqueId())) event.getSuggestions().clear();
+    }
+
+    private static String normalizeCommand(String command) {
+        var separator = command.indexOf(':');
+        var name = separator >= 0 ? command.substring(separator + 1) : command;
+        return name.toLowerCase(Locale.ROOT);
     }
 
     private boolean isBlocked(java.util.UUID playerId) {

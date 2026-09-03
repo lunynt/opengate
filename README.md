@@ -14,6 +14,12 @@ OpenGate is a small authentication gateway for modern Minecraft servers. A singl
 
 Authentication is modeled as a fail-closed per-connection state machine. Identity resolution, registration, passwords, TOTP, trusted sessions, and release are explicit stages rather than scattered listener flags. Platform code enforces decisions made by the shared core.
 
+- effective: authentication decisions fail closed and security work stays off server threads
+- lightweight: one local SQLite database, two bounded workers, and no required services
+- easy to use: safe defaults, two editable configuration files, and platform-specific JARs
+- focused: features must directly support authentication, account security, or operation
+- multi-platform: adapters stay thin while behavior remains in the shared core
+
 Reference projects under `inspo/` are used for behavior research only; OpenGate does not depend on their source.
 
 ## Build

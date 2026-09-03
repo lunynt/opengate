@@ -12,7 +12,7 @@ OpenGate is a small authentication gateway for modern Minecraft servers. A singl
 
 ## Design
 
-Authentication is modeled as a fail-closed per-connection state machine. Identity resolution, registration, passwords, TOTP, trusted sessions, and release are explicit stages rather than scattered listener flags. Platform code enforces decisions made by the shared core.
+Authentication is modeled as a fail-closed per-connection state machine. Identity resolution, registration, passwords, TOTP, and release are explicit stages rather than scattered listener flags. Platform code enforces decisions made by the shared core.
 
 - effective: authentication decisions fail closed and security work stays off server threads
 - lightweight: one local SQLite database, two bounded workers, and no required services
@@ -52,11 +52,12 @@ For Velocity, use modern forwarding and the same forwarding secret on every Pape
 ## Current authentication flow
 
 - Offline players register with `/register <password> <password>` and return with `/login <password>`.
-- Premium players and valid six-hour IP sessions authenticate automatically.
+- Premium players authenticate automatically. Floodgate players do too when the optional integration is installed and confirms their identity.
+- Offline accounts always require their password; an IP address is never treated as proof of identity.
 - Passwords use versioned Argon2id hashes (`64 MiB`, three iterations); hashing runs on a bounded worker pool.
 - Accounts persist in `plugins/OpenGate/opengate.db` using SQLite WAL mode.
 - Authentication expires after 60 seconds and closes after three incorrect passwords.
-- Reconnects cannot reset brute-force protection: IP addresses are limited to ten failures per rolling ten-minute window by default.
+- Reconnects cannot reset brute-force protection: both accounts and IP addresses are limited to ten failures per rolling ten-minute window by default. An address may register five accounts per hour.
 - Paper blocks movement, chat, commands, inventory actions, interaction, damage, and block changes until authentication.
 - Velocity and BungeeCord redirect unauthenticated players to `limbo`, then send them to the first configured lobby after authentication.
 
@@ -70,11 +71,19 @@ Authenticated players can manage their account with:
 /account delete <password> confirm
 ```
 
-Password changes and deletion run Argon2id verification outside the server thread. Logout revokes the persisted trusted session, while deletion removes the account and immediately closes the active authentication session.
+Password changes and deletion run Argon2id verification outside the server thread. Logout closes the active authentication session, while deletion removes the account and immediately disconnects the player.
 
 On first launch OpenGate creates `config.properties`, `messages.properties`, `opengate.db`, and `secret.key`. Authentication timing, password bounds, IP limits, premium lookup, authentication routing, lobby order, and player messages can be changed without rebuilding. Messages support standard `&` color codes on every platform. Use `proxy-auth-server` and the comma-separated `proxy-lobby-servers` list when server names differ. Older Velocity-specific property names remain compatible.
 
-Standard SQLite JDBC does not include portable database encryption, so OpenGate does not present the database as password-protected. Passwords are one-way Argon2id hashes, TOTP secrets use AES-256-GCM, trusted addresses use keyed HMAC fingerprints, and POSIX storage is restricted to its owner. Back up `opengate.db` and `secret.key` together and keep filesystem access private.
+Standard SQLite JDBC does not include portable database encryption, so OpenGate does not present the database as password-protected. Passwords are one-way Argon2id hashes, TOTP secrets use AES-256-GCM, audit addresses use keyed HMAC fingerprints, and POSIX storage is restricted to its owner. Back up `opengate.db` and `secret.key` together and keep filesystem access private.
+
+## Floodgate and Geyser
+
+Install Geyser and Floodgate on the same proxy or server as OpenGate; no additional OpenGate setting is required. OpenGate uses Floodgate's live API and never trusts username prefixes alone. If Floodgate is absent or its API cannot confirm a Bedrock player, authentication fails closed and the normal premium/offline rules apply. On proxy networks, keep Geyser and Floodgate at the proxy layer alongside the OpenGate proxy JAR.
+
+## Security notes
+
+Offline-mode passwords are Minecraft command arguments and are not end-to-end encrypted by OpenGate. Use encrypted transport where your platform supports it, lock backend ports to the proxy, restrict access to `plugins/OpenGate/`, and never share `secret.key`. Rotate exposed credentials immediately. Audit records are retained for 90 days and store keyed address fingerprints rather than raw addresses.
 
 The SQLite schema is versioned and upgraded transactionally. Security events are written to `audit_events`, including logins, failures, rate limits, registration, password changes, session revocation, account deletion, and TOTP changes. Client addresses are stored only as keyed HMAC-SHA256 fingerprints, allowing correlation without retaining raw IP addresses.
 

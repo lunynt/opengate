@@ -16,5 +16,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          validate-wrappers: true
       - run: ./gradlew clean build --no-daemon

@@ -2,6 +2,7 @@ package dev.lunynt.opengate.admin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.lunynt.opengate.account.Account;
 import dev.lunynt.opengate.account.AccountRepository;
@@ -50,6 +51,23 @@ class AdminServiceTest {
 
             assertEquals(AuditEventType.ADMIN_ACCOUNT_LOOKUP, audit.types.get(0));
             assertEquals(AuditEventType.ADMIN_SESSION_REVOKED, audit.types.get(1));
+            var published = new java.util.concurrent.atomic.AtomicBoolean();
+            var cluster = new dev.lunynt.opengate.cluster.ClusterCoordinator() {
+                @Override public java.util.concurrent.CompletionStage<Void> authenticated(UUID id) {
+                    return java.util.concurrent.CompletableFuture.completedFuture(null);
+                }
+                @Override public java.util.concurrent.CompletionStage<Void> revoked(UUID id) {
+                    published.set(true);
+                    return java.util.concurrent.CompletableFuture.completedFuture(null);
+                }
+                @Override public void close() { }
+            };
+            var failingAdmin = new AdminService(accounts, new SessionRegistry(clock), audit, cluster,
+                    id -> java.util.concurrent.CompletableFuture.failedFuture(new IllegalStateException("database unavailable")));
+            assertThrows(java.util.concurrent.CompletionException.class,
+                    () -> failingAdmin.revoke("Player", "console"));
+            assertTrue(published.get());
+            assertEquals(2, audit.types.size(), "failed revocation must not be audited as successful");
         }
     }
 

@@ -5,7 +5,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 
 public final class SqliteSchema {
-    public static final int CURRENT_VERSION = 5;
+    public static final int CURRENT_VERSION = 8;
 
     private SqliteSchema() {}
 
@@ -15,16 +15,7 @@ public final class SqliteSchema {
             configure(connection);
             connection.setAutoCommit(false);
             try {
-                var version = version(connection);
-                if (version > CURRENT_VERSION) {
-                    throw new IllegalStateException(
-                            "database schema " + version + " is newer than supported " + CURRENT_VERSION);
-                }
-                if (version < 1) migrateToVersion1(connection);
-                if (version < 2) migrateToVersion2(connection);
-                if (version < 3) migrateToVersion3(connection);
-                if (version < 4) migrateToVersion4(connection);
-                if (version < 5) migrateToVersion5(connection);
+                migrate(connection);
                 connection.commit();
             } catch (Exception exception) {
                 connection.rollback();
@@ -35,6 +26,22 @@ public final class SqliteSchema {
         } catch (SQLException exception) {
             throw new IllegalStateException("could not migrate OpenGate database", exception);
         }
+    }
+
+    static void migrate(Connection connection) throws SQLException {
+        var version = version(connection);
+        if (version > CURRENT_VERSION) {
+            throw new IllegalStateException(
+                    "database schema " + version + " is newer than supported " + CURRENT_VERSION);
+        }
+        if (version < 1) migrateToVersion1(connection);
+        if (version < 2) migrateToVersion2(connection);
+        if (version < 3) migrateToVersion3(connection);
+        if (version < 4) migrateToVersion4(connection);
+        if (version < 5) migrateToVersion5(connection);
+        if (version < 6) migrateToVersion6(connection);
+        if (version < 7) migrateToVersion7(connection);
+        if (version < 8) migrateToVersion8(connection);
     }
 
     private static void configure(Connection connection) throws SQLException {
@@ -115,6 +122,66 @@ public final class SqliteSchema {
             statement.executeUpdate("ALTER TABLE accounts DROP COLUMN last_authenticated_at");
             statement.executeUpdate("ALTER TABLE accounts DROP COLUMN last_address_fingerprint");
             statement.execute("PRAGMA user_version=5");
+        }
+    }
+
+    private static void migrateToVersion6(Connection connection) throws SQLException {
+        try (var statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS identity_mappings (
+                        source_id TEXT PRIMARY KEY NOT NULL,
+                        translated_id TEXT UNIQUE NOT NULL,
+                        created_at INTEGER NOT NULL
+                    )
+                    """);
+            statement.execute("PRAGMA user_version=6");
+        }
+    }
+
+    private static void migrateToVersion7(Connection connection) throws SQLException {
+        try (var statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS login_sessions (
+                        token_hash TEXT PRIMARY KEY NOT NULL,
+                        player_id TEXT NOT NULL REFERENCES accounts(player_id) ON DELETE CASCADE,
+                        credential_fingerprint TEXT NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        expires_at INTEGER NOT NULL
+                    )
+                    """);
+            if (!columnExists(connection, "login_sessions", "credential_fingerprint")) {
+                statement.executeUpdate("ALTER TABLE login_sessions ADD COLUMN "
+                        + "credential_fingerprint TEXT NOT NULL DEFAULT ''");
+            }
+            statement.executeUpdate(
+                    "CREATE INDEX IF NOT EXISTS login_sessions_player ON login_sessions(player_id)");
+            statement.executeUpdate(
+                    "CREATE INDEX IF NOT EXISTS login_sessions_expiry ON login_sessions(expires_at)");
+            statement.execute("PRAGMA user_version=7");
+        }
+    }
+
+    private static void migrateToVersion8(Connection connection) throws SQLException {
+        try (var statement = connection.createStatement()) {
+            if (!columnExists(connection, "accounts", "session_generation")) {
+                statement.executeUpdate("ALTER TABLE accounts ADD COLUMN "
+                        + "session_generation INTEGER NOT NULL DEFAULT 0");
+            }
+            if (!columnExists(connection, "login_sessions", "session_generation")) {
+                statement.executeUpdate("ALTER TABLE login_sessions ADD COLUMN "
+                        + "session_generation INTEGER NOT NULL DEFAULT 0");
+            }
+            statement.execute("PRAGMA user_version=8");
+        }
+    }
+
+    private static boolean columnExists(Connection connection, String table, String column) throws SQLException {
+        try (var statement = connection.createStatement();
+                var columns = statement.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (columns.next()) {
+                if (column.equalsIgnoreCase(columns.getString("name"))) return true;
+            }
+            return false;
         }
     }
 }

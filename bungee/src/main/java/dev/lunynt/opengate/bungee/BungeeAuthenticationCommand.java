@@ -22,7 +22,7 @@ final class BungeeAuthenticationCommand extends Command {
     @Override
     public void execute(CommandSender sender, String[] arguments) {
         if (!(sender instanceof ProxiedPlayer player)) {
-            sender.sendMessage(new TextComponent("This command can only be used by players."));
+            sender.sendMessage(new TextComponent(plugin.openGate().messages().get("players-only")));
             return;
         }
         switch (getName()) {
@@ -37,12 +37,16 @@ final class BungeeAuthenticationCommand extends Command {
 
     private void register(ProxiedPlayer player, String[] arguments) {
         if (arguments.length != 2 || !arguments[0].equals(arguments[1])) {
-            send(player, "Usage: /register <password> <password>");
+            player.sendMessage(plugin.message(player, "usage-register"));
+            return;
+        }
+        if (!validPasswordLength(arguments[0])) {
+            player.sendMessage(plugin.message(player, "password-policy-invalid"));
             return;
         }
         var session = plugin.openGate().sessions().find(player.getUniqueId()).orElse(null);
         if (session == null || session.state() != AuthenticationState.AWAITING_REGISTRATION) {
-            send(player, "Registration is not required.");
+            player.sendMessage(plugin.message(player, "registration-not-required"));
             return;
         }
         var password = arguments[0].toCharArray();
@@ -50,7 +54,7 @@ final class BungeeAuthenticationCommand extends Command {
         try {
             plugin.openGate().accounts()
                     .register(
-                            player.getUniqueId(),
+                            accountId(player),
                             player.getName(),
                             IdentityType.OFFLINE,
                             password,
@@ -59,17 +63,23 @@ final class BungeeAuthenticationCommand extends Command {
                         if (!isCurrent(player, session)) return;
                         if (error != null) {
                             session.registrationFailed();
-                            send(player, plugin.openGate().messages().get("account-action-failed"));
+                            player.sendMessage(plugin.message(player, "account-action-failed"));
                             return;
                         }
                         session.register();
-                        session.release();
-                        player.sendMessage(plugin.message("registration-success"));
-                        plugin.connectToLobby(player);
+                        if (session.state() == AuthenticationState.AUTHENTICATED) {
+                            session.release();
+                            plugin.issueSessionCookie(player, accountId(player));
+                            player.sendMessage(plugin.message(player, "registration-success"));
+                            plugin.connectToLobby(player);
+                        } else {
+                        player.sendMessage(plugin.message(player, session.state() == AuthenticationState.AWAITING_TOTP
+                                ? "totp-prompt" : "totp-enrollment-required"));
+                        }
                     });
         } catch (IllegalArgumentException error) {
             session.registrationFailed();
-            send(player, error.getMessage());
+            player.sendMessage(plugin.message(player, "account-action-failed"));
         } finally {
             Arrays.fill(password, '\0');
         }
@@ -77,18 +87,18 @@ final class BungeeAuthenticationCommand extends Command {
 
     private void login(ProxiedPlayer player, String[] arguments) {
         if (arguments.length != 1) {
-            send(player, "Usage: /login <password>");
+            player.sendMessage(plugin.message(player, "usage-login"));
             return;
         }
         var session = plugin.openGate().sessions().find(player.getUniqueId()).orElse(null);
         if (session == null || session.state() != AuthenticationState.AWAITING_PASSWORD) {
-            send(player, "Password login is not required.");
+            player.sendMessage(plugin.message(player, "password-not-required"));
             return;
         }
         var password = arguments[0].toCharArray();
         session.beginPasswordVerification();
         plugin.openGate().accounts()
-                .authenticate(player.getUniqueId(), password, BungeeAuthenticationListener.address(player))
+                .authenticate(accountId(player), password, BungeeAuthenticationListener.address(player))
                 .whenComplete((result, error) -> finishLogin(player, session, result, error));
         Arrays.fill(password, '\0');
     }
@@ -101,99 +111,119 @@ final class BungeeAuthenticationCommand extends Command {
         if (!isCurrent(player, session)) return;
         if (result == AuthenticationResult.RATE_LIMITED) {
             session.close();
-            player.disconnect(plugin.message("rate-limited"));
+            player.disconnect(plugin.message(player, "rate-limited"));
             return;
         }
         if (result == AuthenticationResult.SERVICE_BUSY) {
             session.close();
-            player.disconnect(plugin.message("service-busy"));
+            player.disconnect(plugin.message(player, "service-busy"));
             return;
         }
         if (error != null || result != AuthenticationResult.SUCCESS) {
             if (session.rejectPassword(plugin.openGate().config().maximumLoginAttempts())) {
-                player.disconnect(plugin.message("too-many-attempts"));
+                player.disconnect(plugin.message(player, "too-many-attempts"));
             } else {
-                player.sendMessage(plugin.message("incorrect-password"));
+                player.sendMessage(plugin.message(player, "incorrect-password"));
             }
             return;
         }
         session.acceptPassword();
         if (session.state() == AuthenticationState.AUTHENTICATED) {
             session.release();
-            player.sendMessage(plugin.message("login-success"));
+            plugin.issueSessionCookie(player, accountId(player));
+            player.sendMessage(plugin.message(player, "login-success"));
             plugin.connectToLobby(player);
+        } else if (session.state() == AuthenticationState.AWAITING_TOTP_ENROLLMENT) {
+            player.sendMessage(plugin.message(player, "totp-enrollment-required"));
         } else {
-            player.sendMessage(plugin.message("totp-prompt"));
+            player.sendMessage(plugin.message(player, "totp-prompt"));
         }
     }
 
     private void totp(ProxiedPlayer player, String[] arguments) {
         if (arguments.length != 1) {
-            send(player, "Usage: /totp <code>");
+            player.sendMessage(plugin.message(player, "usage-totp"));
             return;
         }
         plugin.proxy().getScheduler().runAsync(plugin, () -> {
             var session = plugin.openGate().sessions().find(player.getUniqueId()).orElse(null);
-            var account = plugin.openGate().accounts().find(player.getUniqueId()).orElse(null);
+            var account = plugin.openGate().accounts().find(accountId(player)).orElse(null);
             if (session == null || account == null || session.state() != AuthenticationState.AWAITING_TOTP) {
-                send(player, "Two-factor authentication is not required.");
+                player.sendMessage(plugin.message(player, "totp-not-required"));
                 return;
             }
             session.beginTotpVerification();
             if (!plugin.openGate().totp().verify(account, arguments[0], BungeeAuthenticationListener.address(player))) {
                 if (session.rejectTotp(plugin.openGate().config().maximumLoginAttempts())) {
-                    player.disconnect(plugin.message("too-many-attempts"));
+                    player.disconnect(plugin.message(player, "too-many-attempts"));
                 } else {
-                    player.sendMessage(plugin.message("totp-invalid"));
+                    player.sendMessage(plugin.message(player, "totp-invalid"));
                 }
                 return;
             }
             session.acceptTotp();
             session.release();
-            player.sendMessage(plugin.message("totp-success"));
+            plugin.issueSessionCookie(player, accountId(player));
+            player.sendMessage(plugin.message(player, "totp-success"));
             plugin.connectToLobby(player);
         });
     }
 
     private void manageTotp(ProxiedPlayer player, String[] arguments) {
-        if (!isReleased(player) || arguments.length == 0) {
-            send(player, "Usage: /2fa setup <password> | confirm <code> | disable <password>");
+        var enrollment = isTotpEnrollment(player);
+        if (!plugin.openGate().config().protectedAccounts().permitsTotpAction(
+                player::hasPermission, enrollment, arguments.length == 0 ? "" : arguments[0])) {
+            player.sendMessage(plugin.message(player, "protected-account"));
+            return;
+        }
+        if ((!isReleased(player) && !enrollment) || arguments.length == 0) {
+            player.sendMessage(plugin.message(player, "usage-2fa"));
             return;
         }
         switch (arguments[0].toLowerCase(Locale.ROOT)) {
             case "setup" -> verifyPasswordThen(player, arguments, () -> {
-                var account = plugin.openGate().accounts().find(player.getUniqueId()).orElseThrow();
+                var account = plugin.openGate().accounts().find(accountId(player)).orElseThrow();
                 var uri = plugin.openGate().totp().begin(account);
                 send(player, plugin.openGate().messages().get("totp-setup") + " " + uri);
             });
             case "confirm" -> plugin.proxy().getScheduler().runAsync(plugin, () -> {
-                if (arguments.length != 2 || !plugin.openGate().totp().confirm(player.getUniqueId(), arguments[1])) {
-                    player.sendMessage(plugin.message("totp-invalid"));
+                if (arguments.length != 2 || !plugin.openGate().totp().confirm(accountId(player), arguments[1])) {
+                    player.sendMessage(plugin.message(player, "totp-invalid"));
                 } else {
-                    player.sendMessage(plugin.message("totp-enabled"));
+                    if (isTotpEnrollment(player)) {
+                        var session = plugin.openGate().sessions().find(player.getUniqueId()).orElseThrow();
+                        session.completeTotpEnrollment();
+                        session.release();
+                        plugin.issueSessionCookie(player, accountId(player));
+                        plugin.connectToLobby(player);
+                    } else {
+                        plugin.clearSessionCookie(player, accountId(player));
+                    }
+                    player.sendMessage(plugin.message(player, "totp-enabled"));
                 }
             });
             case "disable" -> verifyPasswordThen(player, arguments, () -> {
-                var account = plugin.openGate().accounts().find(player.getUniqueId()).orElseThrow();
+                var account = plugin.openGate().accounts().find(accountId(player)).orElseThrow();
                 plugin.openGate().totp().disable(account);
-                player.sendMessage(plugin.message("totp-disabled"));
+                plugin.clearSessionCookie(player, accountId(player));
+                player.sendMessage(plugin.message(player, "totp-disabled"));
             });
-            default -> send(player, "Usage: /2fa setup <password> | confirm <code> | disable <password>");
+            default -> player.sendMessage(plugin.message(player, "usage-2fa"));
         }
     }
 
     private void verifyPasswordThen(ProxiedPlayer player, String[] arguments, Runnable action) {
         if (arguments.length != 2) {
-            send(player, "This action requires your current password.");
+            player.sendMessage(plugin.message(player, "current-password-required"));
             return;
         }
         var password = arguments[1].toCharArray();
         plugin.openGate().accounts()
-                .authenticate(player.getUniqueId(), password, BungeeAuthenticationListener.address(player))
+                .authenticate(accountId(player), password, BungeeAuthenticationListener.address(player))
                 .whenComplete((result, error) -> {
                     if (!player.isConnected()) return;
                     if (error != null || result != AuthenticationResult.SUCCESS) {
-                        player.sendMessage(plugin.message("incorrect-password"));
+                        player.sendMessage(plugin.message(player, "incorrect-password"));
                     } else {
                         action.run();
                     }
@@ -203,23 +233,39 @@ final class BungeeAuthenticationCommand extends Command {
 
     private void manageAccount(ProxiedPlayer player, String[] arguments) {
         if (!isReleased(player) || arguments.length == 0) {
-            send(player, "Usage: /account password <current> <new> | logout | delete <password> confirm");
+            player.sendMessage(plugin.message(player, "usage-account"));
             return;
         }
         switch (arguments[0].toLowerCase(Locale.ROOT)) {
             case "password" -> changePassword(player, arguments);
             case "logout" -> {
-                plugin.openGate().sessions().close(player.getUniqueId());
-                player.disconnect(plugin.message("logged-out"));
+                plugin.clearSessionCookie(player, accountId(player)).whenComplete((ignored, error) ->
+                        plugin.proxy().getScheduler().runAsync(plugin, () -> {
+                            if (!player.isConnected()) return;
+                            if (error != null) {
+                                player.sendMessage(plugin.message(player, "account-action-failed"));
+                                return;
+                            }
+                            plugin.openGate().sessions().close(player.getUniqueId());
+                            player.disconnect(plugin.message(player, "logged-out"));
+                        }));
             }
             case "delete" -> deleteAccount(player, arguments);
-            default -> send(player, "Usage: /account password <current> <new> | logout | delete <password> confirm");
+            default -> player.sendMessage(plugin.message(player, "usage-account"));
         }
     }
 
     private void changePassword(ProxiedPlayer player, String[] arguments) {
+        if (isProtected(player)) {
+            player.sendMessage(plugin.message(player, "protected-account"));
+            return;
+        }
         if (arguments.length != 3) {
-            send(player, "Usage: /account password <current> <new>");
+            player.sendMessage(plugin.message(player, "usage-account-password"));
+            return;
+        }
+        if (!validPasswordLength(arguments[2])) {
+            player.sendMessage(plugin.message(player, "password-policy-invalid"));
             return;
         }
         var current = arguments[1].toCharArray();
@@ -227,28 +273,41 @@ final class BungeeAuthenticationCommand extends Command {
         try {
             plugin.openGate().accounts()
                     .changePassword(
-                            player.getUniqueId(), current, replacement, BungeeAuthenticationListener.address(player))
+                            accountId(player), current, replacement, BungeeAuthenticationListener.address(player))
                     .whenComplete((result, error) -> accountCallback(
-                            player, result, error, () -> player.sendMessage(plugin.message("password-changed"))));
+                            player, result, error, () -> {
+                                plugin.clearSessionCookie(player, accountId(player));
+                                player.sendMessage(plugin.message(player, "password-changed"));
+                            }));
         } catch (IllegalArgumentException error) {
-            send(player, error.getMessage());
+            player.sendMessage(plugin.message(player, "account-action-failed"));
         } finally {
             Arrays.fill(current, '\0');
             Arrays.fill(replacement, '\0');
         }
     }
 
+    private boolean validPasswordLength(String password) {
+        return password.length() >= plugin.openGate().config().minimumPasswordLength()
+                && password.length() <= plugin.openGate().config().maximumPasswordLength();
+    }
+
     private void deleteAccount(ProxiedPlayer player, String[] arguments) {
+        if (isProtected(player)) {
+            player.sendMessage(plugin.message(player, "protected-account"));
+            return;
+        }
         if (arguments.length != 3 || !arguments[2].equalsIgnoreCase("confirm")) {
-            send(player, "Usage: /account delete <password> confirm");
+            player.sendMessage(plugin.message(player, "usage-account-delete"));
             return;
         }
         var password = arguments[1].toCharArray();
         plugin.openGate().accounts()
-                .delete(player.getUniqueId(), password, BungeeAuthenticationListener.address(player))
+                .delete(accountId(player), password, BungeeAuthenticationListener.address(player))
                 .whenComplete((result, error) -> accountCallback(player, result, error, () -> {
+                    plugin.clearSessionCookie(player, accountId(player));
                     plugin.openGate().sessions().close(player.getUniqueId());
-                    player.disconnect(plugin.message("account-deleted"));
+                    player.disconnect(plugin.message(player, "account-deleted"));
                 }));
         Arrays.fill(password, '\0');
     }
@@ -258,11 +317,11 @@ final class BungeeAuthenticationCommand extends Command {
         if (!player.isConnected()) return;
         if (error != null || result != AccountActionResult.SUCCESS) {
             if (result == AccountActionResult.RATE_LIMITED) {
-                player.disconnect(plugin.message("rate-limited"));
+                player.disconnect(plugin.message(player, "rate-limited"));
             } else if (result == AccountActionResult.SERVICE_BUSY) {
-                player.sendMessage(plugin.message("service-busy"));
+                player.sendMessage(plugin.message(player, "service-busy"));
             } else {
-                player.sendMessage(plugin.message("account-action-failed"));
+                player.sendMessage(plugin.message(player, "account-action-failed"));
             }
             return;
         }
@@ -275,6 +334,12 @@ final class BungeeAuthenticationCommand extends Command {
                 .orElse(false);
     }
 
+    private boolean isTotpEnrollment(ProxiedPlayer player) {
+        return plugin.openGate().sessions().find(player.getUniqueId())
+                .map(session -> session.state() == AuthenticationState.AWAITING_TOTP_ENROLLMENT)
+                .orElse(false);
+    }
+
     private boolean isCurrent(
             ProxiedPlayer player, dev.lunynt.opengate.auth.AuthenticationSession session) {
         return player.isConnected()
@@ -283,6 +348,17 @@ final class BungeeAuthenticationCommand extends Command {
 
     private static void send(CommandSender sender, String message) {
         sender.sendMessage(new TextComponent(message));
+    }
+
+    private java.util.UUID accountId(ProxiedPlayer player) {
+        return plugin.openGate().sessions().find(player.getUniqueId())
+                .flatMap(dev.lunynt.opengate.auth.AuthenticationSession::identity)
+                .map(dev.lunynt.opengate.auth.ResolvedIdentity::playerId)
+                .orElseGet(() -> plugin.openGate().identityIds().translate(player.getUniqueId()));
+    }
+
+    private boolean isProtected(ProxiedPlayer player) {
+        return plugin.openGate().config().protectedAccounts().protects(player::hasPermission);
     }
 
 }

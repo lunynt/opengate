@@ -9,16 +9,15 @@ import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.event.player.PlayerChatEvent;
 import com.velocitypowered.api.event.player.TabCompleteEvent;
+import com.velocitypowered.api.event.player.CookieReceiveEvent;
 import dev.lunynt.opengate.auth.AuthenticationState;
 import dev.lunynt.opengate.auth.IdentityType;
 import dev.lunynt.opengate.auth.ResolvedIdentity;
-import java.util.Locale;
-import java.util.Set;
 import net.kyori.adventure.text.Component;
 
 final class VelocityAuthenticationListener {
-    private static final Set<String> ALLOWED_COMMANDS = Set.of("login", "l", "register", "reg", "totp");
-
+    private final java.util.concurrent.ConcurrentMap<java.util.UUID, java.util.concurrent.CompletableFuture<byte[]>>
+            pendingCookies = new java.util.concurrent.ConcurrentHashMap<>();
     private final OpenGateVelocityPlugin plugin;
 
     VelocityAuthenticationListener(OpenGateVelocityPlugin plugin) {
@@ -46,6 +45,8 @@ final class VelocityAuthenticationListener {
                             PreLoginEvent.PreLoginComponentResult.denied(message("username-case-mismatch"));
                     case DENY_LOOKUP_UNAVAILABLE ->
                             PreLoginEvent.PreLoginComponentResult.denied(message("profile-lookup-unavailable"));
+                    case DENY_OFFLINE_NOT_WHITELISTED ->
+                            PreLoginEvent.PreLoginComponentResult.denied(message("offline-not-whitelisted"));
                 });
             } catch (RuntimeException exception) {
                 event.setResult(PreLoginEvent.PreLoginComponentResult.denied(message("profile-lookup-unavailable")));
@@ -55,39 +56,76 @@ final class VelocityAuthenticationListener {
 
     @Subscribe
     public EventTask onPostLogin(PostLoginEvent event) {
-        return EventTask.async(() -> initialize(event));
+        var player = event.getPlayer();
+        var response = new java.util.concurrent.CompletableFuture<byte[]>();
+        pendingCookies.put(player.getUniqueId(), response);
+        player.requestCookie(OpenGateVelocityPlugin.SESSION_COOKIE);
+        plugin.scheduleAuthenticationTimeout(player);
+        return EventTask.async(() -> {
+            byte[] cookie;
+            try {
+                cookie = response.get(3, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (java.util.concurrent.ExecutionException | java.util.concurrent.TimeoutException exception) {
+                cookie = null;
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                cookie = null;
+            } finally {
+                pendingCookies.remove(player.getUniqueId(), response);
+            }
+            initialize(event, cookie);
+        });
     }
 
-    private void initialize(PostLoginEvent event) {
+    @Subscribe
+    public void onCookie(CookieReceiveEvent event) {
+        if (event.getOriginalKey().equals(OpenGateVelocityPlugin.SESSION_COOKIE)) {
+            var pending = pendingCookies.get(event.getPlayer().getUniqueId());
+            if (pending != null) pending.complete(event.getOriginalData());
+        }
+    }
+
+    private void initialize(PostLoginEvent event, byte[] cookie) {
         var player = event.getPlayer();
         var playerId = player.getUniqueId();
         var address = player.getRemoteAddress().getAddress().getHostAddress();
         plugin.openGate().sessions().close(playerId);
         var session = plugin.openGate().sessions().open(playerId);
-        var account = plugin.openGate().accounts().find(playerId);
+        var accountId = plugin.openGate().identityIds().translate(playerId);
+        var account = plugin.openGate().accounts().find(accountId);
+        var cookieValid = account.isPresent() && plugin.openGate().cookieSessions().verify(accountId, cookie).join();
         session.resolve(new ResolvedIdentity(
                 player.getUsername(),
-                playerId,
+                accountId,
                 plugin.floodgate().isPlayer(playerId)
                         ? IdentityType.FLOODGATE
                         : player.isOnlineMode() ? IdentityType.PREMIUM : IdentityType.OFFLINE,
                 account.isPresent(),
                 account.map(value -> value.passwordHash() != null).orElse(false),
-                account.map(value -> value.totpSecret() != null).orElse(false)));
+                account.map(value -> value.totpSecret() != null).orElse(false)),
+                plugin.openGate().config().authenticationRequirements().forPermissions(player::hasPermission));
+
+        if (cookieValid && session.state() != AuthenticationState.AWAITING_REGISTRATION
+                && session.state() != AuthenticationState.AWAITING_TOTP_ENROLLMENT) {
+            session.resumeWithCookie();
+        }
 
         if (session.state() == AuthenticationState.AUTHENTICATED) {
             session.release();
-            player.sendMessage(message("automatic-login"));
+            player.sendMessage(plugin.message(player, "automatic-login"));
         } else if (session.state() == AuthenticationState.AWAITING_REGISTRATION) {
-            player.sendMessage(message("register-prompt"));
+            player.sendMessage(plugin.message(player, "register-prompt"));
+        } else if (session.state() == AuthenticationState.AWAITING_TOTP_ENROLLMENT) {
+            player.sendMessage(plugin.message(player, "totp-enrollment-required"));
         } else {
-            player.sendMessage(message("login-prompt"));
+            player.sendMessage(plugin.message(player, "login-prompt"));
         }
-        plugin.scheduleAuthenticationTimeout(player);
     }
 
     @Subscribe
     public void onDisconnect(DisconnectEvent event) {
+        var pending = pendingCookies.remove(event.getPlayer().getUniqueId());
+        if (pending != null) pending.complete(null);
         plugin.openGate().sessions().close(event.getPlayer().getUniqueId());
     }
 
@@ -99,7 +137,7 @@ final class VelocityAuthenticationListener {
                 event.setResult(ServerPreConnectEvent.ServerResult.allowed(limbo.orElseThrow()));
             } else {
                 event.setResult(ServerPreConnectEvent.ServerResult.denied());
-                event.getPlayer().disconnect(message("limbo-missing"));
+                event.getPlayer().disconnect(plugin.message(event.getPlayer(), "limbo-missing"));
             }
         }
     }
@@ -110,10 +148,10 @@ final class VelocityAuthenticationListener {
                 || !isBlocked(player.getUniqueId())) {
             return;
         }
-        var command = normalizeCommand(event.getCommand().split(" ", 2)[0]);
-        if (!ALLOWED_COMMANDS.contains(command)) {
+        var command = event.getCommand().split(" ", 2)[0];
+        if (!plugin.openGate().config().commands().isAuthenticationLabel(command)) {
             event.setResult(CommandExecuteEvent.CommandResult.denied());
-            player.sendMessage(message("authenticate-first"));
+            player.sendMessage(plugin.message(player, "authenticate-first"));
         }
     }
 
@@ -128,12 +166,6 @@ final class VelocityAuthenticationListener {
     @Subscribe
     public void onTabComplete(TabCompleteEvent event) {
         if (isBlocked(event.getPlayer().getUniqueId())) event.getSuggestions().clear();
-    }
-
-    private static String normalizeCommand(String command) {
-        var separator = command.indexOf(':');
-        var name = separator >= 0 ? command.substring(separator + 1) : command;
-        return name.toLowerCase(Locale.ROOT);
     }
 
     private boolean isBlocked(java.util.UUID playerId) {

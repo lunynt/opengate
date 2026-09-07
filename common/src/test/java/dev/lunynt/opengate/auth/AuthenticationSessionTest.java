@@ -75,6 +75,34 @@ class AuthenticationSessionTest {
         assertEquals(AuthenticationState.CLOSED, session.state());
     }
 
+    @Test
+    void permissionRequirementOverridesPremiumAutomaticLogin() {
+        var session = new AuthenticationSession(CONNECTION_ID, Instant.EPOCH);
+
+        session.resolve(
+                identity(IdentityType.PREMIUM, false, false, false),
+                new AuthenticationRequirements(true, false));
+
+        assertEquals(AuthenticationState.AWAITING_REGISTRATION, session.state());
+    }
+
+    @Test
+    void requiredTotpEnrollmentMustFinishBeforeRelease() {
+        var session = new AuthenticationSession(CONNECTION_ID, Instant.EPOCH);
+        session.resolve(
+                identity(IdentityType.PREMIUM, true, true, false),
+                new AuthenticationRequirements(true, true));
+
+        session.beginPasswordVerification();
+        session.acceptPassword();
+        assertEquals(AuthenticationState.AWAITING_TOTP_ENROLLMENT, session.state());
+        assertThrows(IllegalStateException.class, session::release);
+
+        session.completeTotpEnrollment();
+        session.release();
+        assertEquals(AuthenticationState.RELEASED, session.state());
+    }
+
     private static ResolvedIdentity identity(
             IdentityType type,
             boolean registered,

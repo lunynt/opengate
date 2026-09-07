@@ -25,7 +25,7 @@ public record ResolvedIdentity(
     }
 
     public Optional<AuthenticationMethod> automaticAuthentication() {
-        if (type == IdentityType.FLOODGATE) {
+        if (type == IdentityType.FLOODGATE && !passwordRequired && !totpRequired) {
             return Optional.of(AuthenticationMethod.PREMIUM);
         }
         if (type == IdentityType.PREMIUM && !passwordRequired && !totpRequired) {

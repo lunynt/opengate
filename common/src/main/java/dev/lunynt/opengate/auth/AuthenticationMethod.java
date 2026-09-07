@@ -4,5 +4,6 @@ public enum AuthenticationMethod {
     PREMIUM,
     PASSWORD,
     TOTP,
-    REGISTRATION
+    REGISTRATION,
+    COOKIE
 }

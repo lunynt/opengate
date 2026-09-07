@@ -54,6 +54,12 @@ class SqliteSchemaTest {
             try (var audits = statement.executeQuery("SELECT COUNT(*) FROM audit_events")) {
                 assertEquals(0, audits.getInt(1));
             }
+            try (var mappings = statement.executeQuery("SELECT COUNT(*) FROM identity_mappings")) {
+                assertEquals(0, mappings.getInt(1));
+            }
+            try (var sessions = statement.executeQuery("SELECT COUNT(*) FROM login_sessions")) {
+                assertEquals(0, sessions.getInt(1));
+            }
         }
     }
 

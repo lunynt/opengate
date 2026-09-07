@@ -6,12 +6,24 @@ import dev.lunynt.opengate.identity.FloodgateIdentity;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class OpenGatePaperPlugin extends JavaPlugin {
+    private final org.bukkit.NamespacedKey sessionCookie = new org.bukkit.NamespacedKey(this, "session");
     private OpenGate openGate;
     private FloodgateIdentity floodgate = FloodgateIdentity.unavailable();
 
     @Override
     public void onEnable() {
         openGate = OpenGate.create(getDataFolder().toPath());
+        openGate.sessions().onInvalidated(connectionId -> getServer().getScheduler().runTask(this, () -> {
+            var player = getServer().getPlayer(connectionId);
+            if (player != null) player.kickPlayer(org.bukkit.ChatColor.translateAlternateColorCodes(
+                    '&', openGate.messages().get(java.util.Locale.forLanguageTag(player.getLocale().replace('_', '-')),
+                            "session-revoked")));
+        }));
+        getServer().getServicesManager().register(
+                dev.lunynt.opengate.api.OpenGateApi.class,
+                openGate.api(),
+                this,
+                org.bukkit.plugin.ServicePriority.Normal);
         if (getServer().getPluginManager().isPluginEnabled("floodgate")) {
             try {
                 floodgate = new FloodgateApiIdentity();
@@ -22,17 +34,24 @@ public final class OpenGatePaperPlugin extends JavaPlugin {
         }
         getServer().getPluginManager().registerEvents(new PaperAuthenticationListener(this), this);
         var commands = new PaperAuthenticationCommand(this);
-        java.util.Objects.requireNonNull(getCommand("login")).setExecutor(commands);
-        java.util.Objects.requireNonNull(getCommand("register")).setExecutor(commands);
-        java.util.Objects.requireNonNull(getCommand("totp")).setExecutor(commands);
-        java.util.Objects.requireNonNull(getCommand("2fa")).setExecutor(commands);
-        java.util.Objects.requireNonNull(getCommand("account")).setExecutor(commands);
-        java.util.Objects.requireNonNull(getCommand("opengate")).setExecutor(new PaperAdminCommand(this));
+        configureCommand("login", commands);
+        configureCommand("register", commands);
+        configureCommand("totp", commands);
+        configureCommand("2fa", commands);
+        configureCommand("account", commands);
+        configureCommand("opengate", new PaperAdminCommand(this));
         getLogger().info("OpenGate authentication engine enabled on Paper");
+    }
+
+    private void configureCommand(String name, org.bukkit.command.CommandExecutor executor) {
+        var command = java.util.Objects.requireNonNull(getCommand(name));
+        command.setAliases(openGate.config().commands().aliases(name));
+        command.setExecutor(executor);
     }
 
     @Override
     public void onDisable() {
+        getServer().getServicesManager().unregisterAll(this);
         if (openGate != null) {
             openGate.close();
         }
@@ -42,7 +61,50 @@ public final class OpenGatePaperPlugin extends JavaPlugin {
         return openGate;
     }
 
+    public dev.lunynt.opengate.api.OpenGateApi api() {
+        return openGate.api();
+    }
+
     FloodgateIdentity floodgate() {
         return floodgate;
+    }
+
+    org.bukkit.NamespacedKey sessionCookie() {
+        return sessionCookie;
+    }
+
+    void issueSessionCookie(org.bukkit.entity.Player player, java.util.UUID accountId) {
+        openGate.cookieSessions().issue(accountId).thenAccept(token -> token.ifPresent(value ->
+                getServer().getScheduler().runTask(this, () -> {
+                    if (player.isOnline()) player.storeCookie(sessionCookie, value);
+                })));
+    }
+
+    java.util.concurrent.CompletableFuture<Void> clearSessionCookie(
+            org.bukkit.entity.Player player, java.util.UUID accountId) {
+        if (player.isOnline()) {
+            getServer().getScheduler().runTask(this, () -> {
+                if (player.isOnline()) player.storeCookie(sessionCookie, new byte[0]);
+            });
+        }
+        return openGate.cookieSessions().revokeAll(accountId);
+    }
+
+    void showAuthenticationDialog(org.bukkit.entity.Player player, boolean registration) {
+        if (!openGate.config().minecraftDialogsEnabled()) return;
+        var command = registration ? "/register " : "/login ";
+        var locale = java.util.Locale.forLanguageTag(player.getLocale().replace('_', '-'));
+        var title = new net.md_5.bungee.api.chat.TextComponent(openGate.messages().get(
+                locale, registration ? "dialog-register-title" : "dialog-login-title"));
+        var button = new net.md_5.bungee.api.dialog.action.ActionButton(
+                new net.md_5.bungee.api.chat.TextComponent(openGate.messages().get(
+                        locale, registration ? "dialog-register-button" : "dialog-login-button")),
+                new net.md_5.bungee.api.dialog.action.StaticAction(new net.md_5.bungee.api.chat.ClickEvent(
+                        net.md_5.bungee.api.chat.ClickEvent.Action.SUGGEST_COMMAND, command)));
+        try {
+            player.showDialog(new net.md_5.bungee.api.dialog.NoticeDialog(
+                    new net.md_5.bungee.api.dialog.DialogBase(title), button));
+        } catch (IllegalStateException | UnsupportedOperationException ignored) {
+        }
     }
 }

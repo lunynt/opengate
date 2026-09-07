@@ -12,25 +12,47 @@ public final class AuthenticationSession {
     private ResolvedIdentity identity;
     private AuthenticationMethod method;
     private int failedAttempts;
+    private AuthenticationRequirements requirements = AuthenticationRequirements.NONE;
+    private final java.util.function.Consumer<AuthenticationSession> releaseListener;
 
     public AuthenticationSession(UUID connectionId, Instant createdAt) {
+        this(connectionId, createdAt, ignored -> {});
+    }
+
+    AuthenticationSession(
+            UUID connectionId,
+            Instant createdAt,
+            java.util.function.Consumer<AuthenticationSession> releaseListener) {
         this.connectionId = Objects.requireNonNull(connectionId, "connectionId");
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
+        this.releaseListener = Objects.requireNonNull(releaseListener, "releaseListener");
     }
 
     public synchronized void resolve(ResolvedIdentity resolvedIdentity) {
+        resolve(resolvedIdentity, AuthenticationRequirements.NONE);
+    }
+
+    public synchronized void resolve(
+            ResolvedIdentity resolvedIdentity, AuthenticationRequirements authenticationRequirements) {
         requireState(AuthenticationState.CONNECTING);
         identity = Objects.requireNonNull(resolvedIdentity, "resolvedIdentity");
+        requirements = Objects.requireNonNull(authenticationRequirements, "authenticationRequirements");
 
-        var automaticMethod = identity.automaticAuthentication();
+        var automaticMethod = requirements.equals(AuthenticationRequirements.NONE)
+                ? identity.automaticAuthentication()
+                : Optional.<AuthenticationMethod>empty();
         if (automaticMethod.isPresent()) {
             authenticate(automaticMethod.orElseThrow());
-        } else if (!identity.registered()) {
+        } else if (!identity.registered() || requirements.passwordRequired() && !identity.passwordRequired()) {
             state = AuthenticationState.AWAITING_REGISTRATION;
         } else if (identity.passwordRequired()) {
             state = AuthenticationState.AWAITING_PASSWORD;
-        } else {
+        } else if (identity.totpRequired()) {
             state = AuthenticationState.AWAITING_TOTP;
+        } else if (requirements.totpRequired()) {
+            state = AuthenticationState.AWAITING_TOTP_ENROLLMENT;
+        } else {
+            authenticate(AuthenticationMethod.PREMIUM);
         }
     }
 
@@ -46,7 +68,13 @@ public final class AuthenticationSession {
 
     public synchronized void register() {
         requireState(AuthenticationState.REGISTERING);
-        authenticate(AuthenticationMethod.REGISTRATION);
+        if (identity.totpRequired()) {
+            state = AuthenticationState.AWAITING_TOTP;
+        } else if (requirements.totpRequired()) {
+            state = AuthenticationState.AWAITING_TOTP_ENROLLMENT;
+        } else {
+            authenticate(AuthenticationMethod.REGISTRATION);
+        }
     }
 
     public synchronized void beginPasswordVerification() {
@@ -69,7 +97,11 @@ public final class AuthenticationSession {
             state = AuthenticationState.AWAITING_TOTP;
             return;
         }
-        authenticate(AuthenticationMethod.PASSWORD);
+        if (requirements.totpRequired()) {
+            state = AuthenticationState.AWAITING_TOTP_ENROLLMENT;
+        } else {
+            authenticate(AuthenticationMethod.PASSWORD);
+        }
     }
 
     public synchronized void acceptTotp() {
@@ -80,6 +112,30 @@ public final class AuthenticationSession {
     public synchronized void beginTotpVerification() {
         requireState(AuthenticationState.AWAITING_TOTP);
         state = AuthenticationState.VERIFYING_TOTP;
+    }
+
+    public synchronized void completeTotpEnrollment() {
+        requireState(AuthenticationState.AWAITING_TOTP_ENROLLMENT);
+        authenticate(AuthenticationMethod.TOTP);
+    }
+
+    public synchronized void resumeWithCookie() {
+        if (identity == null || !identity.registered()
+                || !(state == AuthenticationState.AWAITING_PASSWORD
+                    || state == AuthenticationState.AWAITING_TOTP
+                    || state == AuthenticationState.AUTHENTICATED)) {
+            throw new IllegalStateException("cookie cannot resume this authentication session");
+        }
+        if (requirements.passwordRequired()) return;
+        if (identity.totpRequired()) {
+            state = AuthenticationState.AWAITING_TOTP;
+            return;
+        }
+        if (requirements.totpRequired()) {
+            state = AuthenticationState.AWAITING_TOTP_ENROLLMENT;
+            return;
+        }
+        authenticate(AuthenticationMethod.COOKIE);
     }
 
     public synchronized boolean rejectTotp(int maximumAttempts) {
@@ -94,6 +150,7 @@ public final class AuthenticationSession {
     public synchronized void release() {
         requireState(AuthenticationState.AUTHENTICATED);
         state = AuthenticationState.RELEASED;
+        releaseListener.accept(this);
     }
 
     public synchronized void close() {

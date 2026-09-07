@@ -64,8 +64,21 @@ public final class AccountService implements AutoCloseable {
         return submit(addressKey,
                 () -> {
                     try {
-                        if (accounts.findByPlayerId(playerId).isPresent()) {
-                            throw new AccountAlreadyExistsException("player is already registered", null);
+                        var existing = accounts.findByPlayerId(playerId);
+                        if (existing.isPresent()) {
+                            var account = existing.orElseThrow();
+                            if (account.passwordHash() != null) {
+                                throw new AccountAlreadyExistsException("player is already registered", null);
+                            }
+                            var enrolled = account.withPasswordHash(passwords.hash(ownedPassword));
+                            accounts.updatePassword(playerId, enrolled.passwordHash());
+                            auditLog.record(
+                                    AuditEventType.PASSWORD_CHANGED,
+                                    enrolled.playerId(),
+                                    enrolled.username(),
+                                    address,
+                                    "initial-enrollment");
+                            return enrolled;
                         }
                         var now = clock.instant();
                         var account = new Account(

@@ -8,6 +8,7 @@ public enum AuthenticationState {
     VERIFYING_PASSWORD,
     AWAITING_TOTP,
     VERIFYING_TOTP,
+    AWAITING_TOTP_ENROLLMENT,
     AUTHENTICATED,
     RELEASED,
     CLOSED

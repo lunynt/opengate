@@ -24,6 +24,10 @@ allprojects {
             name = "opencollab"
             url = uri("https://repo.opencollab.dev/main/")
         }
+        maven {
+            name = "ajg0702"
+            url = uri("https://repo.ajg0702.us/releases/")
+        }
     }
 }
 
@@ -72,6 +76,18 @@ val verifyPluginJars = tasks.register("verifyPluginJars") {
         inputs.files.files.sortedBy { it.name }.forEach { jar ->
             ZipFile(jar).use { zip ->
                 val entries = zip.entries().asSequence().map { it.name }.toList()
+                check(entries.size == entries.toSet().size) { "$jar contains duplicate ZIP entries" }
+                val drivers = setOf("org.sqlite.JDBC", "org.postgresql.Driver", "com.mysql.cj.jdbc.Driver",
+                    "org.mariadb.jdbc.Driver", "org.h2.Driver")
+                val driverService = zip.getEntry("META-INF/services/java.sql.Driver")
+                    ?: error("$jar is missing JDBC service registration")
+                val registeredDrivers = zip.getInputStream(driverService).bufferedReader().use { reader ->
+                    reader.readLines().map { it.substringBefore('#').trim() }.filter { it.isNotEmpty() }.toSet()
+                }
+                check(registeredDrivers.containsAll(drivers)) { "$jar is missing JDBC driver registrations" }
+                drivers.forEach { driver ->
+                    check(driver.replace('.', '/') + ".class" in entries) { "$jar is missing $driver" }
+                }
                 check(entries.none { it.matches(Regex("META-INF/.*\\.(SF|RSA|DSA)", RegexOption.IGNORE_CASE)) }) {
                     "$jar contains dependency signatures"
                 }
@@ -83,6 +99,12 @@ val verifyPluginJars = tasks.register("verifyPluginJars") {
                 }
                 check(entries.any { it.startsWith("org/sqlite/") }) {
                     "$jar does not contain its database driver"
+                }
+                check(entries.any { it.startsWith("dev/lunynt/opengate/lib/lettuce/") }) {
+                    "$jar does not contain its isolated Redis client"
+                }
+                check(entries.none { it.startsWith("io/lettuce/") || it.startsWith("io/netty/") }) {
+                    "$jar exposes Redis networking classes to the platform classpath"
                 }
             }
 

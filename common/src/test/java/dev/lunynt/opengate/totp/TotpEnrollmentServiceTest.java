@@ -23,21 +23,24 @@ class TotpEnrollmentServiceTest {
         var repository = new MemoryRepository(account);
         var clock = Clock.fixed(Instant.ofEpochSecond(59), ZoneOffset.UTC);
         var totp = new TotpService(clock);
+        var cipher = new SecretCipher(new SecretKeySpec(new byte[32], "AES"));
         var service = new TotpEnrollmentService(
                 repository,
                 totp,
-                new SecretCipher(new SecretKeySpec(new byte[32], "AES")),
+                cipher,
                 clock,
                 AuditLog.noop());
 
         var uri = service.begin(account);
         var secret = uri.substring(uri.indexOf("secret=") + 7, uri.indexOf("&issuer="));
 
+        assertTrue(uri.contains("algorithm=SHA256"));
         assertFalse(service.confirm(account.playerId(), "000000"));
-        var code = totp.generate(secret, 1);
+        var code = totp.generate("sha256:" + secret, 1);
         assertTrue(service.confirm(account.playerId(), code));
         assertTrue(repository.account.totpSecret().startsWith("enc:v2:"));
         assertFalse(repository.account.totpSecret().contains(secret));
+        assertTrue(cipher.decrypt(repository.account.totpSecret()).startsWith("sha256:"));
         assertFalse(service.verify(repository.account, code, "127.0.0.1"));
     }
 

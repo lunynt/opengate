@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import dev.lunynt.opengate.database.DatabaseType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -21,7 +22,45 @@ class OpenGateConfigTest {
         assertEquals(3, config.maximumLoginAttempts());
         assertEquals("limbo", config.limboServer());
         assertEquals(java.util.List.of("lobby"), config.lobbyServers());
+        assertEquals(DatabaseType.SQLITE, config.database().type());
         assertEquals(true, Files.exists(directory.resolve("config.properties")));
+    }
+
+    @Test
+    void loadsRemoteDatabaseConfiguration() throws Exception {
+        OpenGateConfig.load(directory);
+        var file = directory.resolve("config.properties");
+        Files.writeString(file, Files.readString(file)
+                .replace("database-type=sqlite",
+                        "database-type=postgresql\n"
+                                + "database-url=jdbc:postgresql://database.internal/opengate\n"
+                                + "database-username=opengate\ndatabase-password=secret"));
+
+        var config = OpenGateConfig.load(directory);
+
+        assertEquals(DatabaseType.POSTGRESQL, config.database().type());
+        assertEquals("jdbc:postgresql://database.internal/opengate", config.database().jdbcUrl());
+        assertEquals("opengate", config.database().username());
+    }
+
+    @Test
+    void environmentOverridesFileBackedInfrastructureSecrets() throws Exception {
+        var config = OpenGateConfig.load(directory, java.util.Map.of(
+                "OPENGATE_DATABASE_TYPE", "postgresql",
+                "OPENGATE_DATABASE_URL", "jdbc:postgresql://database.internal/cloud",
+                "OPENGATE_DATABASE_USERNAME", "runtime-user",
+                "OPENGATE_DATABASE_PASSWORD", "runtime-secret",
+                "OPENGATE_REDIS_ENABLED", "true",
+                "OPENGATE_REDIS_URI", "rediss://redis.internal:6380"));
+
+        assertEquals(DatabaseType.POSTGRESQL, config.database().type());
+        assertEquals("jdbc:postgresql://database.internal/cloud", config.database().jdbcUrl());
+        assertEquals("runtime-user", config.database().username());
+        assertEquals("runtime-secret", config.database().password());
+        assertEquals(true, config.redis().enabled());
+        assertEquals("rediss://redis.internal:6380", config.redis().uri());
+        var fileContents = Files.readString(directory.resolve("config.properties"));
+        assertEquals(false, fileContents.contains("runtime-secret"));
     }
 
     @Test

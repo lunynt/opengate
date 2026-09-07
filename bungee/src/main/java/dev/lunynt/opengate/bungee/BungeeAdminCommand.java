@@ -9,8 +9,8 @@ import net.md_5.bungee.api.plugin.Command;
 final class BungeeAdminCommand extends Command {
     private final OpenGateBungeePlugin plugin;
 
-    BungeeAdminCommand(OpenGateBungeePlugin plugin) {
-        super("opengate", "opengate.admin");
+    BungeeAdminCommand(OpenGateBungeePlugin plugin, String... aliases) {
+        super("opengate", "opengate.admin", aliases);
         this.plugin = plugin;
     }
 
@@ -34,15 +34,16 @@ final class BungeeAdminCommand extends Command {
     private void lookup(CommandSender sender, String username, String actor) {
         var account = plugin.openGate().admin().lookup(username, actor);
         if (account.isEmpty()) {
-            send(sender, "Account not found.");
+            send(sender, "admin-account-not-found");
             return;
         }
         var value = account.orElseThrow();
-        send(sender, "OpenGate account " + value.username());
-        send(sender, "UUID: " + value.playerId());
-        send(sender, "Identity: " + value.identityType());
-        send(sender, "Created: " + DateTimeFormatter.ISO_INSTANT.format(value.createdAt()));
-        send(sender, "TOTP: " + (value.totpEnabled() ? "enabled" : "disabled"));
+        sendValue(sender, "admin-account-header", value.username());
+        sendValue(sender, "admin-uuid", value.playerId().toString());
+        sendValue(sender, "admin-identity", value.identityType().toString());
+        sendValue(sender, "admin-created", DateTimeFormatter.ISO_INSTANT.format(value.createdAt()));
+        sendValue(sender, "admin-totp", messageText(sender,
+                value.totpEnabled() ? "admin-enabled" : "admin-disabled"));
     }
 
     private void audit(CommandSender sender, String[] arguments, String actor) {
@@ -51,41 +52,58 @@ final class BungeeAdminCommand extends Command {
             try {
                 limit = Integer.parseInt(arguments[2]);
             } catch (NumberFormatException exception) {
-                send(sender, "Audit limit must be a number from 1 to 100.");
+                send(sender, "admin-audit-limit");
                 return;
             }
         }
         try {
             var records = plugin.openGate().admin().audit(arguments[1], limit, actor);
-            send(sender, "Recent OpenGate events for " + arguments[1] + ":");
+            sendValue(sender, "admin-audit-header", arguments[1] + ":");
             for (var record : records) {
-                send(sender, DateTimeFormatter.ISO_INSTANT.format(record.occurredAt()) + " " + record.type()
-                        + (record.detail() == null ? "" : " " + record.detail()));
+                sender.sendMessage(new TextComponent(DateTimeFormatter.ISO_INSTANT.format(record.occurredAt())
+                        + " " + record.type() + (record.detail() == null ? "" : " " + record.detail())));
             }
         } catch (IllegalArgumentException exception) {
-            send(sender, exception.getMessage());
+            send(sender, "admin-account-not-found");
         }
     }
 
     private void revoke(CommandSender sender, String username, String actor) {
-        var account = plugin.openGate().admin().revoke(username, actor);
+        java.util.Optional<dev.lunynt.opengate.admin.AccountSummary> account;
+        try {
+            account = plugin.openGate().admin().revoke(username, actor);
+        } catch (RuntimeException exception) {
+            send(sender, "admin-revocation-failed");
+            return;
+        }
         if (account.isEmpty()) {
-            send(sender, "Account not found.");
+            send(sender, "admin-account-not-found");
             return;
         }
         var value = account.orElseThrow();
         var player = plugin.proxy().getPlayer(value.playerId());
         if (player != null) {
-            player.disconnect(new TextComponent("Your OpenGate session was revoked by an administrator."));
+            player.disconnect(plugin.message(player, "session-revoked"));
         }
-        send(sender, "Revoked sessions for " + value.username() + ".");
+        sendValue(sender, "admin-revoked", value.username() + ".");
     }
 
-    private static void usage(CommandSender sender) {
-        send(sender, "Usage: /opengate lookup <player> | audit <player> [limit] | revoke <player>");
+    private void usage(CommandSender sender) {
+        send(sender, "admin-usage");
     }
 
-    private static void send(CommandSender sender, String message) {
-        sender.sendMessage(new TextComponent(message));
+    private void send(CommandSender sender, String key) {
+        sender.sendMessage(new TextComponent(messageText(sender, key)));
+    }
+
+    private void sendValue(CommandSender sender, String key, String value) {
+        sender.sendMessage(new TextComponent(messageText(sender, key) + value));
+    }
+
+    private String messageText(CommandSender sender, String key) {
+        var raw = sender instanceof ProxiedPlayer player
+                ? plugin.openGate().messages().get(player.getLocale(), key)
+                : plugin.openGate().messages().get(key);
+        return raw.replace('&', '§');
     }
 }

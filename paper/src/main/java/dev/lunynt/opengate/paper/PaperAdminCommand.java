@@ -12,8 +12,6 @@ import org.jetbrains.annotations.NotNull;
 
 final class PaperAdminCommand implements CommandExecutor {
     private static final String PERMISSION = "opengate.admin";
-    private static final String USAGE = "Usage: /opengate lookup <player> | audit <player> [limit] | revoke <player>";
-
     private final OpenGatePaperPlugin plugin;
 
     PaperAdminCommand(OpenGatePaperPlugin plugin) {
@@ -27,24 +25,27 @@ final class PaperAdminCommand implements CommandExecutor {
             @NotNull String label,
             @NotNull String[] arguments) {
         if (!sender.hasPermission(PERMISSION)) {
-            sender.sendMessage("You do not have permission to use this command.");
+            sender.sendMessage(message(sender, "admin-no-permission"));
             return true;
         }
         if (arguments.length < 2) {
-            sender.sendMessage(USAGE);
+            sender.sendMessage(message(sender, "admin-usage"));
             return true;
         }
         var actor = sender instanceof org.bukkit.entity.Player player
                 ? player.getUniqueId().toString()
                 : "console";
+        var locale = sender instanceof org.bukkit.entity.Player player
+                ? Locale.forLanguageTag(player.getLocale().replace('_', '-'))
+                : null;
         var ownedArguments = arguments.clone();
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             AdminResponse response;
             try {
-                response = execute(ownedArguments, actor);
+                response = execute(ownedArguments, actor, locale);
             } catch (RuntimeException exception) {
                 plugin.getLogger().warning("OpenGate admin command failed");
-                response = new AdminResponse(List.of("OpenGate could not complete that request."), null);
+                response = new AdminResponse(List.of(message(sender, "admin-request-failed")), null);
             }
             var completed = response;
             plugin.getServer().getScheduler().runTask(plugin, () -> deliver(sender, completed));
@@ -52,62 +53,89 @@ final class PaperAdminCommand implements CommandExecutor {
         return true;
     }
 
-    private AdminResponse execute(String[] arguments, String actor) {
+    private AdminResponse execute(String[] arguments, String actor, Locale locale) {
         return switch (arguments[0].toLowerCase(Locale.ROOT)) {
-            case "lookup" -> lookup(arguments[1], actor);
-            case "audit" -> audit(arguments, actor);
-            case "revoke" -> revoke(arguments[1], actor);
-            default -> new AdminResponse(List.of(USAGE), null);
+            case "lookup" -> lookup(arguments[1], actor, locale);
+            case "audit" -> audit(arguments, actor, locale);
+            case "revoke" -> revoke(arguments[1], actor, locale);
+            default -> new AdminResponse(List.of(message(locale, "admin-usage")), null);
         };
     }
 
-    private AdminResponse lookup(String username, String actor) {
+    private AdminResponse lookup(String username, String actor, Locale locale) {
         var account = plugin.openGate().admin().lookup(username, actor);
-        if (account.isEmpty()) return new AdminResponse(List.of("Account not found."), null);
+        if (account.isEmpty()) return new AdminResponse(List.of(message(locale, "admin-account-not-found")), null);
         var value = account.orElseThrow();
         return new AdminResponse(List.of(
-                "OpenGate account " + value.username(),
-                "UUID: " + value.playerId(),
-                "Identity: " + value.identityType(),
-                "Created: " + DateTimeFormatter.ISO_INSTANT.format(value.createdAt()),
-                "TOTP: " + (value.totpEnabled() ? "enabled" : "disabled")), null);
+                message(locale, "admin-account-header") + value.username(),
+                message(locale, "admin-uuid") + value.playerId(),
+                message(locale, "admin-identity") + value.identityType(),
+                message(locale, "admin-created") + DateTimeFormatter.ISO_INSTANT.format(value.createdAt()),
+                message(locale, "admin-totp")
+                        + message(locale, value.totpEnabled() ? "admin-enabled" : "admin-disabled")), null);
     }
 
-    private AdminResponse audit(String[] arguments, String actor) {
+    private AdminResponse audit(String[] arguments, String actor, Locale locale) {
         var limit = 10;
         if (arguments.length >= 3) {
             try {
                 limit = Integer.parseInt(arguments[2]);
             } catch (NumberFormatException exception) {
-                return new AdminResponse(List.of("Audit limit must be a number from 1 to 100."), null);
+                return new AdminResponse(List.of(message(locale, "admin-audit-limit")), null);
             }
         }
         try {
             var records = plugin.openGate().admin().audit(arguments[1], limit, actor);
             var lines = new ArrayList<String>();
-            lines.add("Recent OpenGate events for " + arguments[1] + ":");
+            lines.add(message(locale, "admin-audit-header") + arguments[1] + ":");
             for (var record : records) {
                 lines.add(DateTimeFormatter.ISO_INSTANT.format(record.occurredAt()) + " " + record.type()
                         + (record.detail() == null ? "" : " " + record.detail()));
             }
             return new AdminResponse(List.copyOf(lines), null);
         } catch (IllegalArgumentException exception) {
-            return new AdminResponse(List.of(exception.getMessage()), null);
+            return new AdminResponse(List.of(message(locale, "admin-account-not-found")), null);
         }
     }
 
-    private AdminResponse revoke(String username, String actor) {
-        var account = plugin.openGate().admin().revoke(username, actor);
-        if (account.isEmpty()) return new AdminResponse(List.of("Account not found."), null);
+    private AdminResponse revoke(String username, String actor, Locale locale) {
+        java.util.Optional<dev.lunynt.opengate.admin.AccountSummary> account;
+        try {
+            account = plugin.openGate().admin().revoke(username, actor);
+        } catch (RuntimeException exception) {
+            return new AdminResponse(
+                    List.of(message(locale, "admin-revocation-failed")), null);
+        }
+        if (account.isEmpty()) return new AdminResponse(List.of(message(locale, "admin-account-not-found")), null);
         var value = account.orElseThrow();
-        return new AdminResponse(List.of("Revoked sessions for " + value.username() + "."), value.playerId());
+        return new AdminResponse(List.of(message(locale, "admin-revoked") + value.username() + "."), value.playerId());
     }
 
     private void deliver(CommandSender sender, AdminResponse response) {
         response.lines().forEach(sender::sendMessage);
         if (response.playerToDisconnect() == null) return;
         var online = plugin.getServer().getPlayer(response.playerToDisconnect());
-        if (online != null) online.kickPlayer("Your OpenGate session was revoked by an administrator.");
+        if (online != null) online.kickPlayer(message(online, "session-revoked"));
+    }
+
+    private String message(Locale locale, String key) {
+        return color(locale == null
+                ? plugin.openGate().messages().get(key)
+                : plugin.openGate().messages().get(locale, key));
+    }
+
+    private String message(CommandSender sender, String key) {
+        if (sender instanceof org.bukkit.entity.Player player) return message(player, key);
+        return color(plugin.openGate().messages().get(key));
+    }
+
+    private String message(org.bukkit.entity.Player player, String key) {
+        var locale = Locale.forLanguageTag(player.getLocale().replace('_', '-'));
+        return color(plugin.openGate().messages().get(locale, key));
+    }
+
+    private static String color(String value) {
+        return org.bukkit.ChatColor.translateAlternateColorCodes('&', value);
     }
 
     private record AdminResponse(List<String> lines, UUID playerToDisconnect) {}

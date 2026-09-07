@@ -1,9 +1,8 @@
 package dev.lunynt.opengate.account;
 
 import dev.lunynt.opengate.auth.IdentityType;
-import dev.lunynt.opengate.database.SqliteSchema;
-import dev.lunynt.opengate.database.SqliteConnections;
-import java.nio.file.Path;
+import dev.lunynt.opengate.database.DatabaseType;
+import dev.lunynt.opengate.database.OpenGateDataSource;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -12,17 +11,18 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
-public final class SqliteAccountRepository implements AccountRepository {
+public final class JdbcAccountRepository implements AccountRepository {
     private static final String SELECT_COLUMNS = """
             SELECT player_id, username, identity_type, password_hash, totp_secret, created_at
             FROM accounts
             """;
 
-    private final String jdbcUrl;
+    private final OpenGateDataSource dataSource;
+    private final DatabaseType databaseType;
 
-    public SqliteAccountRepository(Path databaseFile) {
-        jdbcUrl = "jdbc:sqlite:" + databaseFile.toAbsolutePath();
-        SqliteSchema.migrate(databaseFile);
+    public JdbcAccountRepository(OpenGateDataSource dataSource) {
+        this.dataSource = java.util.Objects.requireNonNull(dataSource, "dataSource");
+        this.databaseType = dataSource.type();
     }
 
     @Override
@@ -36,7 +36,7 @@ public final class SqliteAccountRepository implements AccountRepository {
     }
 
     private Optional<Account> query(String sql, String value) {
-        try (var connection = connection(); var statement = connection.prepareStatement(sql)) {
+        try (var connection = dataSource.getConnection(); var statement = connection.prepareStatement(sql)) {
             statement.setString(1, value);
             try (var results = statement.executeQuery()) {
                 return results.next() ? Optional.of(map(results)) : Optional.empty();
@@ -48,7 +48,18 @@ public final class SqliteAccountRepository implements AccountRepository {
 
     @Override
     public void save(Account account) {
-        var sql = """
+        var sql = switch (databaseType) {
+            case MYSQL, MARIADB -> """
+                INSERT INTO accounts (player_id, username, normalized_username, identity_type, password_hash,
+                    totp_secret, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE username=VALUES(username), normalized_username=VALUES(normalized_username),
+                    identity_type=VALUES(identity_type), password_hash=VALUES(password_hash), totp_secret=VALUES(totp_secret)
+                """;
+            case H2 -> """
+                MERGE INTO accounts (player_id, username, normalized_username, identity_type, password_hash,
+                    totp_secret, created_at) KEY(player_id) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """;
+            default -> """
                 INSERT INTO accounts (
                     player_id, username, normalized_username, identity_type, password_hash,
                     totp_secret, created_at
@@ -60,7 +71,8 @@ public final class SqliteAccountRepository implements AccountRepository {
                     password_hash = excluded.password_hash,
                     totp_secret = excluded.totp_secret
                 """;
-        try (var connection = connection(); var statement = connection.prepareStatement(sql)) {
+        };
+        try (var connection = dataSource.getConnection(); var statement = connection.prepareStatement(sql)) {
             statement.setString(1, account.playerId().toString());
             statement.setString(2, account.username());
             statement.setString(3, account.normalizedUsername());
@@ -70,7 +82,8 @@ public final class SqliteAccountRepository implements AccountRepository {
             statement.setLong(7, account.createdAt().toEpochMilli());
             statement.executeUpdate();
         } catch (SQLException exception) {
-            if (exception.getMessage() != null && exception.getMessage().contains("UNIQUE constraint failed")) {
+            if ("23505".equals(exception.getSQLState()) || "23000".equals(exception.getSQLState())
+                    || exception.getMessage() != null && exception.getMessage().contains("UNIQUE constraint failed")) {
                 throw new AccountAlreadyExistsException("username is already registered", exception);
             }
             throw new IllegalStateException("could not save OpenGate account", exception);
@@ -89,7 +102,7 @@ public final class SqliteAccountRepository implements AccountRepository {
 
     private void updateCredential(String column, UUID playerId, String value) {
         var sql = "UPDATE accounts SET " + column + " = ? WHERE player_id = ?";
-        try (var connection = connection(); var statement = connection.prepareStatement(sql)) {
+        try (var connection = dataSource.getConnection(); var statement = connection.prepareStatement(sql)) {
             statement.setString(1, value);
             statement.setString(2, playerId.toString());
             if (statement.executeUpdate() != 1) {
@@ -102,7 +115,7 @@ public final class SqliteAccountRepository implements AccountRepository {
 
     @Override
     public void delete(UUID playerId) {
-        try (var connection = connection();
+        try (var connection = dataSource.getConnection();
                 var statement = connection.prepareStatement("DELETE FROM accounts WHERE player_id = ?")) {
             statement.setString(1, playerId.toString());
             statement.executeUpdate();
@@ -113,12 +126,17 @@ public final class SqliteAccountRepository implements AccountRepository {
 
     @Override
     public boolean claimTotpStep(UUID playerId, long step) {
-        var sql = """
+        if (databaseType == DatabaseType.H2 || databaseType == DatabaseType.MYSQL
+                || databaseType == DatabaseType.MARIADB) return claimConditionalTotpStep(playerId, step);
+        var sql = switch (databaseType) {
+            case MYSQL, MARIADB, H2 -> throw new AssertionError();
+            default -> """
                 INSERT INTO totp_replay(player_id, last_step) VALUES(?, ?)
                 ON CONFLICT(player_id) DO UPDATE SET last_step = excluded.last_step
                 WHERE excluded.last_step > totp_replay.last_step
                 """;
-        try (var connection = connection(); var statement = connection.prepareStatement(sql)) {
+        };
+        try (var connection = dataSource.getConnection(); var statement = connection.prepareStatement(sql)) {
             statement.setString(1, playerId.toString());
             statement.setLong(2, step);
             return statement.executeUpdate() == 1;
@@ -127,8 +145,33 @@ public final class SqliteAccountRepository implements AccountRepository {
         }
     }
 
-    private Connection connection() throws SQLException {
-        return SqliteConnections.open(jdbcUrl);
+    private boolean claimConditionalTotpStep(UUID playerId, long step) {
+        try (var connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try (var update = connection.prepareStatement(
+                            "UPDATE totp_replay SET last_step = ? WHERE player_id = ? AND last_step < ?")) {
+                update.setLong(1, step);
+                update.setString(2, playerId.toString());
+                update.setLong(3, step);
+                if (update.executeUpdate() == 1) {
+                    connection.commit();
+                    return true;
+                }
+            }
+            try (var insert = connection.prepareStatement(
+                            "INSERT INTO totp_replay(player_id, last_step) VALUES(?, ?)")) {
+                insert.setString(1, playerId.toString());
+                insert.setLong(2, step);
+                insert.executeUpdate();
+                connection.commit();
+                return true;
+            } catch (SQLException duplicate) {
+                connection.rollback();
+                return false;
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("could not update OpenGate TOTP counter", exception);
+        }
     }
 
     private static Account map(ResultSet results) throws SQLException {

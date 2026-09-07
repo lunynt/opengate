@@ -3,7 +3,6 @@ package dev.lunynt.opengate.paper;
 import dev.lunynt.opengate.auth.AuthenticationState;
 import dev.lunynt.opengate.auth.IdentityType;
 import dev.lunynt.opengate.auth.ResolvedIdentity;
-import java.util.Set;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -30,8 +29,6 @@ import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 
 final class PaperAuthenticationListener implements Listener {
-    private static final Set<String> ALLOWED_COMMANDS = Set.of("login", "l", "register", "reg", "totp");
-
     private final OpenGatePaperPlugin plugin;
 
     PaperAuthenticationListener(OpenGatePaperPlugin plugin) {
@@ -49,18 +46,29 @@ final class PaperAuthenticationListener implements Listener {
         var session = plugin.openGate().sessions().open(playerId);
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                var account = plugin.openGate().accounts().find(playerId);
+                byte[] cookie;
+                try {
+                    cookie = player.retrieveCookie(plugin.sessionCookie()).get(3, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException exception) {
+                    cookie = null;
+                }
+                var accountId = plugin.openGate().identityIds().translate(playerId);
+                var account = plugin.openGate().accounts().find(accountId);
+                var cookieValid = account.isPresent()
+                        && plugin.openGate().cookieSessions().verify(accountId, cookie).get();
                 plugin.getServer().getScheduler().runTask(plugin, () -> finishJoin(
                         player,
                         session,
+                        accountId,
                         account,
+                        cookieValid,
                         plugin.floodgate().isPlayer(playerId)
                                 ? IdentityType.FLOODGATE
                                 : plugin.getServer().getOnlineMode() ? IdentityType.PREMIUM : IdentityType.OFFLINE));
-            } catch (RuntimeException exception) {
+            } catch (Exception exception) {
                 plugin.getLogger().severe("Could not load account for " + player.getName() + ": " + exception.getMessage());
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
-                    if (isCurrent(player, session)) player.kickPlayer(message("profile-lookup-unavailable"));
+                    if (isCurrent(player, session)) player.kickPlayer(message(player, "profile-lookup-unavailable"));
                 });
             }
         });
@@ -70,33 +78,50 @@ final class PaperAuthenticationListener implements Listener {
     private void finishJoin(
             org.bukkit.entity.Player player,
             dev.lunynt.opengate.auth.AuthenticationSession session,
+            java.util.UUID accountId,
             java.util.Optional<dev.lunynt.opengate.account.Account> account,
+            boolean cookieValid,
             IdentityType identityType) {
         if (!isCurrent(player, session)) return;
+        if (identityType == IdentityType.OFFLINE
+                && !plugin.openGate().config().offlineWhitelist().allows(player.getName())) {
+            player.kickPlayer(message(player, "offline-not-whitelisted"));
+            return;
+        }
         var playerId = player.getUniqueId();
         var registered = account.isPresent();
         session.resolve(new ResolvedIdentity(
                 player.getName(),
-                playerId,
+                accountId,
                 identityType,
                 registered,
                 account.map(value -> value.passwordHash() != null).orElse(false),
-                account.map(value -> value.totpSecret() != null).orElse(false)));
+                account.map(value -> value.totpSecret() != null).orElse(false)),
+                plugin.openGate().config().authenticationRequirements().forPermissions(player::hasPermission));
+
+        if (cookieValid && session.state() != AuthenticationState.AWAITING_REGISTRATION
+                && session.state() != AuthenticationState.AWAITING_TOTP_ENROLLMENT) {
+            session.resumeWithCookie();
+        }
 
         if (session.state() == AuthenticationState.AUTHENTICATED) {
             session.release();
-            player.sendMessage(message("automatic-login"));
+            player.sendMessage(message(player, "automatic-login"));
         } else if (session.state() == AuthenticationState.AWAITING_REGISTRATION) {
-            player.sendMessage(message("register-prompt"));
+            player.sendMessage(message(player, "register-prompt"));
+            plugin.showAuthenticationDialog(player, true);
+        } else if (session.state() == AuthenticationState.AWAITING_TOTP_ENROLLMENT) {
+            player.sendMessage(message(player, "totp-enrollment-required"));
         } else {
-            player.sendMessage(message("login-prompt"));
+            player.sendMessage(message(player, "login-prompt"));
+            plugin.showAuthenticationDialog(player, false);
         }
     }
 
     private void scheduleTimeout(org.bukkit.entity.Player player, java.util.UUID playerId) {
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             if (player.isOnline() && isBlocked(playerId)) {
-                player.kickPlayer(message("authentication-timeout"));
+                player.kickPlayer(message(player, "authentication-timeout"));
             }
         }, plugin.openGate().config().authenticationTimeout().toSeconds() * 20L);
     }
@@ -122,13 +147,24 @@ final class PaperAuthenticationListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onCommand(PlayerCommandPreprocessEvent event) {
+        remapAlias(event);
         if (!isBlocked(event.getPlayer().getUniqueId())) {
             return;
         }
-        var command = normalizeCommand(event.getMessage().substring(1).split(" ", 2)[0]);
-        if (!ALLOWED_COMMANDS.contains(command)) {
+        var command = event.getMessage().substring(1).split(" ", 2)[0];
+        if (!plugin.openGate().config().commands().isAuthenticationLabel(command)) {
             event.setCancelled(true);
-            event.getPlayer().sendMessage(message("authenticate-first"));
+            event.getPlayer().sendMessage(message(event.getPlayer(), "authenticate-first"));
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onServerCommand(org.bukkit.event.server.ServerCommandEvent event) {
+        var parts = event.getCommand().split(" ", 2);
+        var label = parts[0].toLowerCase(java.util.Locale.ROOT);
+        var canonical = plugin.openGate().config().commands().canonical(label);
+        if (!canonical.equals(label)) {
+            event.setCommand(canonical + (parts.length == 2 ? " " + parts[1] : ""));
         }
     }
 
@@ -221,7 +257,8 @@ final class PaperAuthenticationListener implements Listener {
     @EventHandler
     public void onCommandsSent(PlayerCommandSendEvent event) {
         if (!isBlocked(event.getPlayer().getUniqueId())) return;
-        event.getCommands().removeIf(command -> !ALLOWED_COMMANDS.contains(normalizeCommand(command)));
+        event.getCommands().removeIf(command -> !plugin.openGate().config().commands()
+                .isAuthenticationLabel(command));
     }
 
     private boolean isBlocked(java.util.UUID playerId) {
@@ -242,13 +279,22 @@ final class PaperAuthenticationListener implements Listener {
                         || from.getBlockZ() != to.getBlockZ());
     }
 
-    private static String normalizeCommand(String command) {
-        var separator = command.indexOf(':');
-        var name = separator >= 0 ? command.substring(separator + 1) : command;
-        return name.toLowerCase(java.util.Locale.ROOT);
+    private void remapAlias(PlayerCommandPreprocessEvent event) {
+        var commandLine = event.getMessage().substring(1);
+        var parts = commandLine.split(" ", 2);
+        var label = parts[0].toLowerCase(java.util.Locale.ROOT);
+        var canonical = plugin.openGate().config().commands().canonical(label);
+        if (!canonical.equals(label)) {
+            event.setMessage("/" + canonical + (parts.length == 2 ? " " + parts[1] : ""));
+        }
     }
 
     private String message(String key) {
         return org.bukkit.ChatColor.translateAlternateColorCodes('&', plugin.openGate().messages().get(key));
+    }
+
+    private String message(org.bukkit.entity.Player player, String key) {
+        return org.bukkit.ChatColor.translateAlternateColorCodes('&',
+                plugin.openGate().messages().get(java.util.Locale.forLanguageTag(player.getLocale().replace('_', '-')), key));
     }
 }

@@ -39,6 +39,19 @@ class IdentityResolverTest {
         assertEquals(IdentityDecision.DENY_LOOKUP_UNAVAILABLE, resolver.resolve("Player"));
     }
 
+    @Test
+    void offlineWhitelistAppliesToKnownAndUnknownOfflineAccounts() {
+        accounts.save(account("Blocked", IdentityType.OFFLINE));
+        var resolver = new IdentityResolver(
+                accounts,
+                ignored -> ProfileLookupResult.notFound(),
+                true,
+                "Allowed"::equals);
+
+        assertEquals(IdentityDecision.OFFLINE, resolver.resolve("Allowed"));
+        assertEquals(IdentityDecision.DENY_OFFLINE_NOT_WHITELISTED, resolver.resolve("Blocked"));
+    }
+
     private static Account account(String username, IdentityType type) {
         return new Account(UUID.randomUUID(), username, type, "hash", null, Instant.EPOCH);
     }

@@ -11,12 +11,22 @@ public final class IdentityResolver {
     private final AccountRepository accounts;
     private final ProfileLookup profiles;
     private final boolean premiumLookupEnabled;
+    private final java.util.function.Predicate<String> offlineWhitelist;
 
     public IdentityResolver(
             AccountRepository accounts, ProfileLookup profiles, boolean premiumLookupEnabled) {
+        this(accounts, profiles, premiumLookupEnabled, ignored -> true);
+    }
+
+    public IdentityResolver(
+            AccountRepository accounts,
+            ProfileLookup profiles,
+            boolean premiumLookupEnabled,
+            java.util.function.Predicate<String> offlineWhitelist) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.premiumLookupEnabled = premiumLookupEnabled;
+        this.offlineWhitelist = Objects.requireNonNull(offlineWhitelist, "offlineWhitelist");
     }
 
     public IdentityDecision resolve(String username) {
@@ -30,13 +40,14 @@ public final class IdentityResolver {
             if (!existing.username().equals(username)) {
                 return IdentityDecision.DENY_CASE_MISMATCH;
             }
-            return existing.identityType() == IdentityType.PREMIUM
-                    ? IdentityDecision.ONLINE
-                    : IdentityDecision.OFFLINE;
+            if (existing.identityType() == IdentityType.PREMIUM) return IdentityDecision.ONLINE;
+            return offlineWhitelist.test(username)
+                    ? IdentityDecision.OFFLINE
+                    : IdentityDecision.DENY_OFFLINE_NOT_WHITELISTED;
         }
 
         if (!premiumLookupEnabled) {
-            return IdentityDecision.OFFLINE;
+            return offlineDecision(username);
         }
 
         var result = profiles.find(username);
@@ -44,10 +55,16 @@ public final class IdentityResolver {
             return IdentityDecision.DENY_LOOKUP_UNAVAILABLE;
         }
         if (result.status() == ProfileLookupResult.Status.NOT_FOUND) {
-            return IdentityDecision.OFFLINE;
+            return offlineDecision(username);
         }
         return result.profile().username().equals(username)
                 ? IdentityDecision.ONLINE
                 : IdentityDecision.DENY_CASE_MISMATCH;
+    }
+
+    private IdentityDecision offlineDecision(String username) {
+        return offlineWhitelist.test(username)
+                ? IdentityDecision.OFFLINE
+                : IdentityDecision.DENY_OFFLINE_NOT_WHITELISTED;
     }
 }

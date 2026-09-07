@@ -4,7 +4,7 @@ plugins {
 
 dependencies {
     implementation("org.bouncycastle:bcprov-jdk18on:1.84")
-    implementation("com.zaxxer:HikariCP:7.0.2")
+    implementation("com.zaxxer:HikariCP:7.1.0")
     implementation("org.xerial:sqlite-jdbc:3.53.1.0")
     implementation("org.postgresql:postgresql:42.7.8")
     implementation("com.mysql:mysql-connector-j:9.5.0")

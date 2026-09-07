@@ -213,3 +213,7 @@ Operators with `opengate.admin` can use:
 ```
 
 Admin lookups, audit reads, and revocations are themselves audited. Lookup output intentionally excludes addresses and password/TOTP material.
+
+## License
+
+OpenGate is licensed under the GNU Affero General Public License v3.0. See [LICENSE](LICENSE) for the full terms.

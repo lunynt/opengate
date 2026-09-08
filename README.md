@@ -45,7 +45,7 @@ Paper, Bukkit, Spigot, and BungeeCord require Java 21 or newer. Velocity require
 
 1. Download the JAR for your platform and place it in `plugins/`.
 2. Start the server once to generate the configuration files.
-3. Edit `plugins/OpenGate/config.properties` and restart.
+3. Edit `plugins/OpenGate/config.yml` and restart.
 
 Keep `online-mode=true` on premium-only servers. Only use offline mode if you want offline players to register and log in.
 
@@ -84,43 +84,59 @@ Admin commands require `opengate.admin`:
 
 ## Configuration
 
-OpenGate creates `config.properties`, `messages.properties`, `opengate.db`, and `secret.key` on first launch. For most servers, the default SQLite setup is enough.
+OpenGate creates `config.yml`, `messages.yml`, `opengate.db`, and `secret.key` on first launch. For most servers, the default SQLite setup is enough.
 
 To use another database:
 
-```properties
-database-type=postgresql
-database-url=jdbc:postgresql://database.internal:5432/opengate
-database-username=opengate
-database-password=change-me
-database-pool-size=10
+```yaml
+database:
+  type: postgresql
+  url: jdbc:postgresql://database.internal:5432/opengate
+  username: opengate
+  password: change-me
+  pool-size: 10
 ```
 
 Valid database types are `sqlite`, `postgresql`, `mysql`, `mariadb`, and `h2`.
 
-Command aliases are comma-separated:
+Command aliases are YAML lists:
 
-```properties
-command.login.aliases=l,signin
-command.register.aliases=reg,signup
-command.totp.aliases=otp
+```yaml
+commands:
+  login:
+    aliases: [l, signin]
+  register:
+    aliases: [reg, signup]
+  totp:
+    aliases: [otp]
 ```
 
 You can require stronger authentication for staff and protect sensitive accounts from credential changes:
 
-```properties
-require-login-permissions=group.admin
-require-2fa-permissions=group.owner
-protected-account-permissions=group.owner
+```yaml
+authentication:
+  require-login-permissions: [group.admin]
+  require-2fa-permissions: [group.owner]
+  protected-account-permissions: [group.owner]
 ```
 
-Add translation files such as `messages_lt.properties` or `messages_pt_BR.properties`. OpenGate uses the player's exact locale first, then the base language, then `messages.properties`.
+Add translation files such as `messages_lt.yml` or `messages_pt_BR.yml`. OpenGate uses the player's exact locale first, then the base language, then `messages.yml`.
 
 Database, Redis, and secret-key settings can also come from environment variables for containerized deployments.
 
 ## Proxy setup
 
-Unauthenticated players are sent to the server configured by `proxy-auth-server`, which defaults to `limbo`. After login, they are sent to the first available server in `proxy-lobby-servers`.
+Configure the authentication server and post-login destinations in `config.yml`:
+
+```yaml
+proxy:
+  auth-server: limbo
+  lobby-servers:
+    - lobby
+    - survival
+```
+
+Add servers with those exact names to your Velocity or BungeeCord configuration. `limbo` should be an isolated authentication server with no gameplay permissions or sensitive plugins. OpenGate keeps unauthenticated players there, then sends them to the first available lobby after login.
 
 Velocity networks should use modern forwarding with the same forwarding secret on every backend. BungeeCord networks need IP forwarding enabled. In both cases, use a firewall or private network so players can't connect to backend servers directly.
 
@@ -148,10 +164,11 @@ Install Floodgate alongside OpenGate on the server or proxy. Verified Bedrock pl
 
 If you're running multiple proxies, Redis keeps authentication sessions in sync:
 
-```properties
-redis-enabled=true
-redis-uri=rediss://user:password@redis.internal:6379/0
-redis-channel=opengate:production
+```yaml
+redis:
+  enabled: true
+  uri: rediss://user:password@redis.internal:6379/0
+  channel: opengate:production
 ```
 
 Every proxy should use the same Redis channel, database, `secret.key`, and UUID settings. If Redis becomes unavailable, OpenGate rejects authentication rather than risking inconsistent sessions.
@@ -160,9 +177,11 @@ Every proxy should use the same Redis channel, database, `secret.key`, and UUID 
 
 OpenGate can send authenticated players into an ajQueue queue instead of connecting them directly:
 
-```properties
-ajqueue-enabled=true
-ajqueue-target=survival
+```yaml
+integrations:
+  ajqueue:
+    enabled: true
+    target: survival
 ```
 
 Install ajQueue on the same proxy before enabling the integration.

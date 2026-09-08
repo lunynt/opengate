@@ -15,8 +15,8 @@ class OpenGateLocalizationTest {
 
     @Test
     void selectsExactThenLanguageThenDefaultBundle() throws Exception {
-        Files.writeString(directory.resolve("messages_lt.properties"), "login-success=Prisijungta\n");
-        Files.writeString(directory.resolve("messages_pt_BR.properties"), "login-success=Conectado BR\n");
+        Files.writeString(directory.resolve("messages_lt.yml"), "login-success: Prisijungta\n");
+        Files.writeString(directory.resolve("messages_pt_BR.yml"), "login-success: Conectado BR\n");
         var messages = OpenGateMessages.load(directory);
 
         assertEquals("Prisijungta", messages.get(Locale.forLanguageTag("lt-LT"), "login-success"));
@@ -26,7 +26,7 @@ class OpenGateLocalizationTest {
 
     @Test
     void rejectsUnknownTranslationKeys() throws Exception {
-        Files.writeString(directory.resolve("messages_lt.properties"), "typo-key=value\n");
+        Files.writeString(directory.resolve("messages_lt.yml"), "typo-key: value\n");
         assertThrows(IllegalArgumentException.class, () -> OpenGateMessages.load(directory));
     }
 }

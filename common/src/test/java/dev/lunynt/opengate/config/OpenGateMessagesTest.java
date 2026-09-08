@@ -20,6 +20,16 @@ class OpenGateMessagesTest {
         assertTrue(messages.get("login-success").contains("&a✓"));
         assertTrue(messages.get("incorrect-password").contains("&c✕"));
         assertEquals(messages.get("login-prompt"), OpenGateMessages.load(directory).get("login-prompt"));
-        assertTrue(Files.exists(directory.resolve("messages.properties")));
+        assertTrue(Files.exists(directory.resolve("messages.yml")));
+    }
+
+    @Test
+    void migratesLegacyMessageOverrides() throws Exception {
+        Files.writeString(directory.resolve("messages.properties"), "login-success=Welcome back\n");
+
+        var messages = OpenGateMessages.load(directory);
+
+        assertEquals("Welcome back", messages.get("login-success"));
+        assertTrue(Files.exists(directory.resolve("messages.yml")));
     }
 }

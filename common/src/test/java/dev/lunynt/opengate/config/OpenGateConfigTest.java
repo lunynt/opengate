@@ -23,18 +23,18 @@ class OpenGateConfigTest {
         assertEquals("limbo", config.limboServer());
         assertEquals(java.util.List.of("lobby"), config.lobbyServers());
         assertEquals(DatabaseType.SQLITE, config.database().type());
-        assertEquals(true, Files.exists(directory.resolve("config.properties")));
+        assertEquals(true, Files.exists(directory.resolve("config.yml")));
     }
 
     @Test
     void loadsRemoteDatabaseConfiguration() throws Exception {
         OpenGateConfig.load(directory);
-        var file = directory.resolve("config.properties");
+        var file = directory.resolve("config.yml");
         Files.writeString(file, Files.readString(file)
-                .replace("database-type=sqlite",
-                        "database-type=postgresql\n"
-                                + "database-url=jdbc:postgresql://database.internal/opengate\n"
-                                + "database-username=opengate\ndatabase-password=secret"));
+                .replace("type: sqlite", "type: postgresql\n"
+                        + "  url: jdbc:postgresql://database.internal/opengate")
+                .replace("username: ''", "username: opengate")
+                .replace("password: ''", "password: secret"));
 
         var config = OpenGateConfig.load(directory);
 
@@ -59,34 +59,26 @@ class OpenGateConfigTest {
         assertEquals("runtime-secret", config.database().password());
         assertEquals(true, config.redis().enabled());
         assertEquals("rediss://redis.internal:6380", config.redis().uri());
-        var fileContents = Files.readString(directory.resolve("config.properties"));
+        var fileContents = Files.readString(directory.resolve("config.yml"));
         assertEquals(false, fileContents.contains("runtime-secret"));
     }
 
     @Test
     void rejectsUnsafeAttemptLimit() throws Exception {
         OpenGateConfig.load(directory);
-        var file = directory.resolve("config.properties");
-        Files.writeString(file, Files.readString(file).replace("maximum-login-attempts=3", "maximum-login-attempts=0"));
+        var file = directory.resolve("config.yml");
+        Files.writeString(file, Files.readString(file).replace("maximum-login-attempts: 3", "maximum-login-attempts: 0"));
 
         assertThrows(IllegalArgumentException.class, () -> OpenGateConfig.load(directory));
     }
 
     @Test
-    void loadsLegacyProxyNames() throws Exception {
-        Files.writeString(directory.resolve("config.properties"), """
-                authentication-timeout-seconds=60
-                trusted-session-hours=6
-                maximum-login-attempts=3
-                maximum-ip-failures=10
-                ip-failure-window-minutes=10
-                minimum-password-length=8
-                maximum-password-length=128
-                premium-lookup-enabled=true
-                premium-lookup-timeout-millis=3000
-                velocity-limbo-server=auth
-                velocity-lobby-servers=survival,creative
-                """);
+    void loadsProxyRouting() throws Exception {
+        OpenGateConfig.load(directory);
+        var file = directory.resolve("config.yml");
+        Files.writeString(file, Files.readString(file)
+                .replace("auth-server: limbo", "auth-server: auth")
+                .replace("- lobby", "- survival\n    - creative"));
 
         var config = OpenGateConfig.load(directory);
 
@@ -97,9 +89,28 @@ class OpenGateConfigTest {
     @Test
     void rejectsInvalidBoolean() throws Exception {
         OpenGateConfig.load(directory);
-        var file = directory.resolve("config.properties");
-        Files.writeString(file, Files.readString(file).replace("premium-lookup-enabled=true", "premium-lookup-enabled=yes"));
+        var file = directory.resolve("config.yml");
+        Files.writeString(file, Files.readString(file).replace("enabled: true\n    timeout-millis", "enabled: maybe\n    timeout-millis"));
 
         assertThrows(IllegalArgumentException.class, () -> OpenGateConfig.load(directory));
+    }
+
+    @Test
+    void migratesLegacyPropertiesWithoutLosingDatabaseOrProxySettings() throws Exception {
+        Files.writeString(directory.resolve("config.properties"), """
+                database-type=postgresql
+                database-url=jdbc:postgresql://database.internal/opengate
+                database-username=opengate
+                proxy-auth-server=auth
+                proxy-lobby-servers=lobby,survival
+                """);
+
+        var config = OpenGateConfig.load(directory);
+
+        assertEquals(DatabaseType.POSTGRESQL, config.database().type());
+        assertEquals("jdbc:postgresql://database.internal/opengate", config.database().jdbcUrl());
+        assertEquals("auth", config.limboServer());
+        assertEquals(java.util.List.of("lobby", "survival"), config.lobbyServers());
+        assertEquals(true, Files.exists(directory.resolve("config.yml")));
     }
 }

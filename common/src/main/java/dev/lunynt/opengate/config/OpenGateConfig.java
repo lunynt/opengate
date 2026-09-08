@@ -38,43 +38,93 @@ public record OpenGateConfig(
         OfflineWhitelistConfiguration offlineWhitelist) {
 
     private static final String DEFAULTS = """
-            authentication-timeout-seconds=60
-            maximum-login-attempts=3
-            maximum-ip-failures=10
-            maximum-account-failures=10
-            ip-failure-window-minutes=10
-            maximum-registrations-per-ip=5
-            registration-window-minutes=60
-            minimum-password-length=8
-            maximum-password-length=128
-            premium-lookup-enabled=true
-            premium-lookup-timeout-millis=3000
-            proxy-auth-server=limbo
-            proxy-lobby-servers=lobby
-            database-type=sqlite
-            database-pool-size=10
-            database-connection-timeout-millis=5000
-            command.login.aliases=l
-            command.register.aliases=reg
-            command.totp.aliases=
-            command.2fa.aliases=
-            command.account.aliases=
-            command.opengate.aliases=
-            translate-uuid4-to-uuid7=false
-            protected-account-permissions=
-            require-login-permissions=
-            require-2fa-permissions=
-            cookie-sessions-enabled=true
-            cookie-session-hours=12
-            redis-enabled=false
-            redis-uri=redis://localhost:6379
-            redis-channel=opengate:cluster
-            redis-timeout-millis=3000
-            ajqueue-enabled=false
-            ajqueue-target=lobby
-            minecraft-dialogs-enabled=true
-            offline-whitelist-enabled=false
-            offline-whitelist=
+            # Login limits, password rules, premium lookup, and permission-based requirements.
+            authentication:
+              # Seconds a player has to finish authentication.
+              timeout-seconds: 60
+              # Failed attempts allowed for one connection, IP, and account.
+              maximum-login-attempts: 3
+              maximum-ip-failures: 10
+              maximum-account-failures: 10
+              # Time used to count IP failures and registrations.
+              ip-failure-window-minutes: 10
+              maximum-registrations-per-ip: 5
+              registration-window-minutes: 60
+              password:
+                # Inclusive password length range.
+                minimum-length: 8
+                maximum-length: 128
+              premium-lookup:
+                # Check Mojang before treating a player as offline.
+                enabled: true
+                timeout-millis: 3000
+              # Players with these permissions must use a password or 2FA.
+              require-login-permissions: []
+              require-2fa-permissions: []
+              # Accounts with these permissions cannot change or delete credentials.
+              protected-account-permissions: []
+
+            # Proxy routing. Server names must match Velocity or BungeeCord.
+            proxy:
+              # Isolated server used while a player authenticates.
+              auth-server: limbo
+              # Tried in order after authentication succeeds.
+              lobby-servers:
+                - lobby
+
+            # sqlite, postgresql, mysql, mariadb, or h2.
+            database:
+              type: sqlite
+              # Omit url to use OpenGate's default for the selected database type.
+              username: ''
+              password: ''
+              pool-size: 10
+              connection-timeout-millis: 5000
+
+            # Add as many aliases as needed. Use [] to disable aliases.
+            commands:
+              login:
+                aliases: [l]
+              register:
+                aliases: [reg]
+              totp:
+                aliases: []
+              2fa:
+                aliases: []
+              account:
+                aliases: []
+              opengate:
+                aliases: []
+            identity:
+              # Store translated UUIDv7 identities instead of incoming UUIDv4 values.
+              translate-uuid4-to-uuid7: false
+
+            sessions:
+              cookies:
+                # Let supported clients resume a revocable authenticated session.
+                enabled: true
+                lifetime-hours: 12
+
+            # Required only for session synchronization across multiple proxies.
+            redis:
+              enabled: false
+              uri: redis://localhost:6379
+              channel: opengate:cluster
+              timeout-millis: 3000
+            integrations:
+              ajqueue:
+                # Queue authenticated players instead of connecting directly.
+                enabled: false
+                target: lobby
+
+            minecraft-dialogs:
+              # Show login/register dialogs on clients that support them.
+              enabled: true
+
+            offline-whitelist:
+              # Restrict offline accounts to the names below.
+              enabled: false
+              players: []
             """;
 
     public OpenGateConfig {
@@ -123,9 +173,14 @@ public record OpenGateConfig(
     }
 
     static OpenGateConfig load(Path dataDirectory, Map<String, String> environment) {
-        var file = dataDirectory.resolve("config.properties");
-        createDefault(file, DEFAULTS);
-        var properties = loadProperties(file);
+        var file = dataDirectory.resolve("config.yml");
+        var legacy = dataDirectory.resolve("config.properties");
+        if (Files.notExists(file) && Files.exists(legacy)) {
+            YamlConfiguration.migrateConfig(file, loadProperties(legacy), DEFAULTS);
+        } else {
+            createDefault(file, DEFAULTS);
+        }
+        var properties = YamlConfiguration.load(file);
         applyEnvironmentOverrides(properties, environment);
         return new OpenGateConfig(
                 Duration.ofSeconds(integer(properties, "authentication-timeout-seconds")),

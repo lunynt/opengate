@@ -1,78 +1,74 @@
 package dev.lunynt.opengate.config;
 
 import java.nio.file.Path;
-import java.io.IOException;
-import java.io.StringReader;
 import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.Locale;
-import java.util.Properties;
-import java.util.stream.Collectors;
 
 public final class OpenGateMessages {
     private static final String DEFAULTS = """
-            register-prompt=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ʀᴇɢɪꜱᴛᴇʀ ᴡɪᴛʜ &f/register <password> <password>
-            login-prompt=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ʟᴏɢ ɪɴ ᴡɪᴛʜ &f/login <password>
-            automatic-login=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ᴀᴜᴛʜᴇɴᴛɪᴄᴀᴛᴇᴅ
-            login-success=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ʟᴏɢɪɴ ᴄᴏᴍᴘʟᴇᴛᴇ
-            registration-success=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ᴀᴄᴄᴏᴜɴᴛ ᴄʀᴇᴀᴛᴇᴅ
-            incorrect-password=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ɪɴᴄᴏʀʀᴇᴄᴛ ᴘᴀꜱꜱᴡᴏʀᴅ
-            too-many-attempts=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴛᴏᴏ ᴍᴀɴʏ ᴀᴛᴛᴇᴍᴘᴛꜱ
-            rate-limited=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ
-            authentication-timeout=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴀᴜᴛʜᴇɴᴛɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇᴅ ᴏᴜᴛ
-            authenticate-first=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴀᴜᴛʜᴇɴᴛɪᴄᴀᴛᴇ ꜰɪʀꜱᴛ
-            limbo-missing=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴀᴜᴛʜ ꜱᴇʀᴠᴇʀ ᴜɴᴀᴠᴀɪʟᴀʙʟᴇ
-            invalid-username=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴜꜱᴇ 3-16 ʟᴇᴛᴛᴇʀꜱ, ɴᴜᴍʙᴇʀꜱ, ᴏʀ ᴜɴᴅᴇʀꜱᴄᴏʀᴇꜱ
-            username-case-mismatch=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴜꜱᴇ ʏᴏᴜʀ ʀᴇɢɪꜱᴛᴇʀᴇᴅ ɴᴀᴍᴇ ᴄᴀꜱɪɴɢ
-            profile-lookup-unavailable=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴀᴄᴄᴏᴜɴᴛ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴜɴᴀᴠᴀɪʟᴀʙʟᴇ
-            totp-prompt=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴇɴᴛᴇʀ ʏᴏᴜʀ ᴄᴏᴅᴇ ᴡɪᴛʜ &f/totp <code>
-            totp-invalid=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ɪɴᴠᴀʟɪᴅ ᴀᴜᴛʜᴇɴᴛɪᴄᴀᴛᴏʀ ᴄᴏᴅᴇ
-            totp-success=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ᴛᴡᴏ-ꜰᴀᴄᴛᴏʀ ᴄᴏᴍᴘʟᴇᴛᴇ
-            totp-setup=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴄᴏᴘʏ ᴛʜɪꜱ ᴜʀɪ, ᴛʜᴇɴ ᴜꜱᴇ &f/2fa confirm <code>&7:
-            totp-enabled=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ᴛᴡᴏ-ꜰᴀᴄᴛᴏʀ ᴇɴᴀʙʟᴇᴅ
-            totp-disabled=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴛᴡᴏ-ꜰᴀᴄᴛᴏʀ ᴅɪꜱᴀʙʟᴇᴅ
-            password-changed=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ᴘᴀꜱꜱᴡᴏʀᴅ ᴄʜᴀɴɢᴇᴅ
-            logged-out=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ʟᴏɢɢᴇᴅ ᴏᴜᴛ
-            account-deleted=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴀᴄᴄᴏᴜɴᴛ ᴅᴇʟᴇᴛᴇᴅ
-            account-action-failed=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴀᴄᴄᴏᴜɴᴛ ᴀᴄᴛɪᴏɴ ꜰᴀɪʟᴇᴅ
-            protected-account=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴄʀᴇᴅᴇɴᴛɪᴀʟ ᴄʜᴀɴɢᴇꜱ ᴀʀᴇ ᴅɪꜱᴀʙʟᴇᴅ ꜰᴏʀ ᴛʜɪꜱ ᴀᴄᴄᴏᴜɴᴛ
-            totp-enrollment-required=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ꜱᴇᴛ ᴜᴘ 2ꜰᴀ ᴡɪᴛʜ &f/2fa setup <password>
-            offline-not-whitelisted=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴛʜɪꜱ ᴏꜰꜰʟɪɴᴇ ᴀᴄᴄᴏᴜɴᴛ ɪꜱ ɴᴏᴛ ᴡʜɪᴛᴇʟɪꜱᴛᴇᴅ
-            session-revoked=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ʏᴏᴜʀ ᴀᴜᴛʜᴇɴᴛɪᴄᴀᴛɪᴏɴ ꜱᴇꜱꜱɪᴏɴ ᴡᴀꜱ ʀᴇᴠᴏᴋᴇᴅ
-            service-busy=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ꜱᴇʀᴠɪᴄᴇ ʙᴜꜱʏ, ᴛʀʏ ᴀɢᴀɪɴ
-            players-only=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴛʜɪꜱ ᴄᴏᴍᴍᴀɴᴅ ɪꜱ ꜰᴏʀ ᴘʟᴀʏᴇʀꜱ
-            usage-register=&7Usage: /register <password> <password>
-            usage-login=&7Usage: /login <password>
-            usage-totp=&7Usage: /totp <code>
-            usage-2fa=&7Usage: /2fa setup <password> | confirm <code> | disable <password>
-            usage-account=&7Usage: /account password <current> <new> | logout | delete <password> confirm
-            usage-account-password=&7Usage: /account password <current> <new>
-            usage-account-delete=&7Usage: /account delete <password> confirm
-            registration-not-required=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ʀᴇɢɪꜱᴛʀᴀᴛɪᴏɴ ɪꜱ ɴᴏᴛ ʀᴇQᴜɪʀᴇᴅ
-            password-not-required=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴘᴀꜱꜱᴡᴏʀᴅ ʟᴏɢɪɴ ɪꜱ ɴᴏᴛ ʀᴇQᴜɪʀᴇᴅ
-            totp-not-required=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴛᴡᴏ-ꜰᴀᴄᴛᴏʀ ɪꜱ ɴᴏᴛ ʀᴇQᴜɪʀᴇᴅ
-            current-password-required=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴛʜɪꜱ ᴀᴄᴛɪᴏɴ ʀᴇQᴜɪʀᴇꜱ ʏᴏᴜʀ ᴄᴜʀʀᴇɴᴛ ᴘᴀꜱꜱᴡᴏʀᴅ
-            password-policy-invalid=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴘᴀꜱꜱᴡᴏʀᴅ ᴅᴏᴇꜱ ɴᴏᴛ ᴍᴇᴇᴛ ᴛʜᴇ ᴄᴏɴꜰɪɢᴜʀᴇᴅ ʟᴇɴɢᴛʜ ʀᴇQᴜɪʀᴇᴍᴇɴᴛꜱ
-            dialog-register-title=Register
-            dialog-login-title=Login
-            dialog-register-button=Enter registration command
-            dialog-login-button=Enter login command
-            queue-unavailable=&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴛʜᴇ ꜱᴇʀᴠᴇʀ Qᴜᴇᴜᴇ ɪꜱ ᴜɴᴀᴠᴀɪʟᴀʙʟᴇ
-            admin-no-permission=&cYou do not have permission to use this command.
-            admin-usage=&7Usage: /opengate lookup <player> | audit <player> [limit] | revoke <player>
-            admin-request-failed=&cOpenGate could not complete that request.
-            admin-account-not-found=&cAccount not found.
-            admin-account-header=&7OpenGate account: &f
-            admin-uuid=&7UUID: &f
-            admin-identity=&7Identity: &f
-            admin-created=&7Created: &f
-            admin-totp=&7TOTP: &f
-            admin-enabled=enabled
-            admin-disabled=disabled
-            admin-audit-limit=&cAudit limit must be a number from 1 to 100.
-            admin-audit-header=&7Recent OpenGate events for &f
-            admin-revocation-failed=&cRevocation failed; some sessions may already be closed.
-            admin-revoked=&aRevoked sessions for &f
+            register-prompt: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ʀᴇɢɪꜱᴛᴇʀ ᴡɪᴛʜ &f/register <password> <password>'
+            login-prompt: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ʟᴏɢ ɪɴ ᴡɪᴛʜ &f/login <password>'
+            automatic-login: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ᴀᴜᴛʜᴇɴᴛɪᴄᴀᴛᴇᴅ'
+            login-success: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ʟᴏɢɪɴ ᴄᴏᴍᴘʟᴇᴛᴇ'
+            registration-success: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ᴀᴄᴄᴏᴜɴᴛ ᴄʀᴇᴀᴛᴇᴅ'
+            incorrect-password: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ɪɴᴄᴏʀʀᴇᴄᴛ ᴘᴀꜱꜱᴡᴏʀᴅ'
+            too-many-attempts: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴛᴏᴏ ᴍᴀɴʏ ᴀᴛᴛᴇᴍᴘᴛꜱ'
+            rate-limited: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ'
+            authentication-timeout: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴀᴜᴛʜᴇɴᴛɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇᴅ ᴏᴜᴛ'
+            authenticate-first: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴀᴜᴛʜᴇɴᴛɪᴄᴀᴛᴇ ꜰɪʀꜱᴛ'
+            limbo-missing: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴀᴜᴛʜ ꜱᴇʀᴠᴇʀ ᴜɴᴀᴠᴀɪʟᴀʙʟᴇ'
+            invalid-username: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴜꜱᴇ 3-16 ʟᴇᴛᴛᴇʀꜱ, ɴᴜᴍʙᴇʀꜱ, ᴏʀ ᴜɴᴅᴇʀꜱᴄᴏʀᴇꜱ'
+            username-case-mismatch: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴜꜱᴇ ʏᴏᴜʀ ʀᴇɢɪꜱᴛᴇʀᴇᴅ ɴᴀᴍᴇ ᴄᴀꜱɪɴɢ'
+            profile-lookup-unavailable: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴀᴄᴄᴏᴜɴᴛ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴜɴᴀᴠᴀɪʟᴀʙʟᴇ'
+            totp-prompt: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴇɴᴛᴇʀ ʏᴏᴜʀ ᴄᴏᴅᴇ ᴡɪᴛʜ &f/totp <code>'
+            totp-invalid: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ɪɴᴠᴀʟɪᴅ ᴀᴜᴛʜᴇɴᴛɪᴄᴀᴛᴏʀ ᴄᴏᴅᴇ'
+            totp-success: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ᴛᴡᴏ-ꜰᴀᴄᴛᴏʀ ᴄᴏᴍᴘʟᴇᴛᴇ'
+            totp-setup: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴄᴏᴘʏ ᴛʜɪꜱ ᴜʀɪ, ᴛʜᴇɴ ᴜꜱᴇ &f/2fa confirm <code>&7:'
+            totp-enabled: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ᴛᴡᴏ-ꜰᴀᴄᴛᴏʀ ᴇɴᴀʙʟᴇᴅ'
+            totp-disabled: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴛᴡᴏ-ꜰᴀᴄᴛᴏʀ ᴅɪꜱᴀʙʟᴇᴅ'
+            password-changed: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ᴘᴀꜱꜱᴡᴏʀᴅ ᴄʜᴀɴɢᴇᴅ'
+            logged-out: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ʟᴏɢɢᴇᴅ ᴏᴜᴛ'
+            account-deleted: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴀᴄᴄᴏᴜɴᴛ ᴅᴇʟᴇᴛᴇᴅ'
+            account-action-failed: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴀᴄᴄᴏᴜɴᴛ ᴀᴄᴛɪᴏɴ ꜰᴀɪʟᴇᴅ'
+            protected-account: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴄʀᴇᴅᴇɴᴛɪᴀʟ ᴄʜᴀɴɢᴇꜱ ᴀʀᴇ ᴅɪꜱᴀʙʟᴇᴅ ꜰᴏʀ ᴛʜɪꜱ ᴀᴄᴄᴏᴜɴᴛ'
+            totp-enrollment-required: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ꜱᴇᴛ ᴜᴘ 2ꜰᴀ ᴡɪᴛʜ &f/2fa setup <password>'
+            offline-not-whitelisted: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴛʜɪꜱ ᴏꜰꜰʟɪɴᴇ ᴀᴄᴄᴏᴜɴᴛ ɪꜱ ɴᴏᴛ ᴡʜɪᴛᴇʟɪꜱᴛᴇᴅ'
+            session-revoked: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ʏᴏᴜʀ ᴀᴜᴛʜᴇɴᴛɪᴄᴀᴛɪᴏɴ ꜱᴇꜱꜱɪᴏɴ ᴡᴀꜱ ʀᴇᴠᴏᴋᴇᴅ'
+            service-busy: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ꜱᴇʀᴠɪᴄᴇ ʙᴜꜱʏ, ᴛʀʏ ᴀɢᴀɪɴ'
+            players-only: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴛʜɪꜱ ᴄᴏᴍᴍᴀɴᴅ ɪꜱ ꜰᴏʀ ᴘʟᴀʏᴇʀꜱ'
+            usage-register: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴜꜱᴀɢᴇ &8• &f/register <password> <password>'
+            usage-login: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴜꜱᴀɢᴇ &8• &f/login <password>'
+            usage-totp: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴜꜱᴀɢᴇ &8• &f/totp <code>'
+            usage-2fa: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴜꜱᴀɢᴇ &8• &f/2fa setup <password> | confirm <code> | disable <password>'
+            usage-account: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴜꜱᴀɢᴇ &8• &f/account password <current> <new> | logout | delete <password> confirm'
+            usage-account-password: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴜꜱᴀɢᴇ &8• &f/account password <current> <new>'
+            usage-account-delete: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴜꜱᴀɢᴇ &8• &f/account delete <password> confirm'
+            registration-not-required: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ʀᴇɢɪꜱᴛʀᴀᴛɪᴏɴ ɪꜱ ɴᴏᴛ ʀᴇqᴜɪʀᴇᴅ'
+            password-not-required: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴘᴀꜱꜱᴡᴏʀᴅ ʟᴏɢɪɴ ɪꜱ ɴᴏᴛ ʀᴇqᴜɪʀᴇᴅ'
+            totp-not-required: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴛᴡᴏ-ꜰᴀᴄᴛᴏʀ ɪꜱ ɴᴏᴛ ʀᴇqᴜɪʀᴇᴅ'
+            current-password-required: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴛʜɪꜱ ᴀᴄᴛɪᴏɴ ʀᴇQᴜɪʀᴇꜱ ʏᴏᴜʀ ᴄᴜʀʀᴇɴᴛ ᴘᴀꜱꜱᴡᴏʀᴅ'
+            password-policy-invalid: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴘᴀꜱꜱᴡᴏʀᴅ ᴅᴏᴇꜱ ɴᴏᴛ ᴍᴇᴇᴛ ᴛʜᴇ ᴄᴏɴꜰɪɢᴜʀᴇᴅ ʟᴇɴɢᴛʜ ʀᴇQᴜɪʀᴇᴍᴇɴᴛꜱ'
+            dialog-register-title: 'ᴄʀᴇᴀᴛᴇ ᴀᴄᴄᴏᴜɴᴛ'
+            dialog-login-title: 'ᴡᴇʟᴄᴏᴍᴇ ʙᴀᴄᴋ'
+            dialog-register-button: 'ᴇɴᴛᴇʀ ʀᴇɢɪꜱᴛᴇʀ ᴄᴏᴍᴍᴀɴᴅ'
+            dialog-login-button: 'ᴇɴᴛᴇʀ ʟᴏɢɪɴ ᴄᴏᴍᴍᴀɴᴅ'
+            queue-unavailable: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴛʜᴇ ꜱᴇʀᴠᴇʀ Qᴜᴇᴜᴇ ɪꜱ ᴜɴᴀᴠᴀɪʟᴀʙʟᴇ'
+            admin-no-permission: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ɴᴏ ᴘᴇʀᴍɪꜱꜱɪᴏɴ'
+            admin-usage: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴜꜱᴀɢᴇ &8• &f/opengate lookup <player> | audit <player> [limit] | revoke <player>'
+            admin-request-failed: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ʀᴇqᴜᴇꜱᴛ ꜰᴀɪʟᴇᴅ'
+            admin-account-not-found: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴀᴄᴄᴏᴜɴᴛ ɴᴏᴛ ꜰᴏᴜɴᴅ'
+            admin-account-header: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴀᴄᴄᴏᴜɴᴛ &8• &f'
+            admin-uuid: '&7ᴜᴜɪᴅ &8• &f'
+            admin-identity: '&7ɪᴅᴇɴᴛɪᴛʏ &8• &f'
+            admin-created: '&7ᴄʀᴇᴀᴛᴇᴅ &8• &f'
+            admin-totp: '&7ᴛᴏᴛᴘ &8• &f'
+            admin-enabled: 'ᴇɴᴀʙʟᴇᴅ'
+            admin-disabled: 'ᴅɪꜱᴀʙʟᴇᴅ'
+            admin-audit-limit: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ʟɪᴍɪᴛ ᴍᴜꜱᴛ ʙᴇ 1-100'
+            admin-audit-header: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ʀᴇᴄᴇɴᴛ ᴇᴠᴇɴᴛꜱ &8• &f'
+            admin-revocation-failed: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ꜱᴏᴍᴇ ꜱᴇꜱꜱɪᴏɴꜱ ᴄᴏᴜʟᴅ ɴᴏᴛ ʙᴇ ᴄʟᴏꜱᴇᴅ'
+            admin-revoked: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ʀᴇᴠᴏᴋᴇᴅ ꜱᴇꜱꜱɪᴏɴꜱ ꜰᴏʀ &f'
             """;
 
     private final Map<String, String> messages;
@@ -84,23 +80,20 @@ public final class OpenGateMessages {
     }
 
     public static OpenGateMessages load(Path dataDirectory) {
-        var file = dataDirectory.resolve("messages.properties");
-        OpenGateConfig.createDefault(file, DEFAULTS);
-        var properties = defaults();
-        properties.putAll(OpenGateConfig.loadProperties(file));
-        var base = properties.stringPropertyNames().stream()
-                .collect(Collectors.toMap(key -> key, properties::getProperty));
+        var file = dataDirectory.resolve("messages.yml");
+        var legacy = dataDirectory.resolve("messages.properties");
+        if (java.nio.file.Files.notExists(file) && java.nio.file.Files.exists(legacy)) {
+            YamlConfiguration.migrateMessages(file, OpenGateConfig.loadProperties(legacy), DEFAULTS);
+        } else {
+            OpenGateConfig.createDefault(file, DEFAULTS);
+        }
+        var base = new LinkedHashMap<>(defaults());
+        base.putAll(YamlConfiguration.loadFlat(file));
         return new OpenGateMessages(base, loadLocalized(dataDirectory, base));
     }
 
-    private static Properties defaults() {
-        var properties = new Properties();
-        try {
-            properties.load(new StringReader(DEFAULTS));
-            return properties;
-        } catch (IOException exception) {
-            throw new IllegalStateException("invalid built-in OpenGate messages", exception);
-        }
+    private static Map<String, String> defaults() {
+        return YamlConfiguration.loadFlat(DEFAULTS);
     }
 
     public String get(String key) {
@@ -123,20 +116,20 @@ public final class OpenGateMessages {
 
     private static Map<String, Map<String, String>> loadLocalized(Path directory, Map<String, String> base) {
         var bundles = new LinkedHashMap<String, Map<String, String>>();
-        try (var files = java.nio.file.Files.newDirectoryStream(directory, "messages_*.properties")) {
+        try (var files = java.nio.file.Files.newDirectoryStream(directory, "messages_*.yml")) {
             for (var file : files) {
                 var name = file.getFileName().toString();
-                var tag = name.substring("messages_".length(), name.length() - ".properties".length())
+                var tag = name.substring("messages_".length(), name.length() - ".yml".length())
                         .replace('_', '-').toLowerCase(Locale.ROOT);
                 if (tag.isBlank() || Locale.forLanguageTag(tag).getLanguage().isBlank()) {
                     throw new IllegalArgumentException("invalid message locale filename: " + name);
                 }
                 var translated = new LinkedHashMap<>(base);
-                var overrides = OpenGateConfig.loadProperties(file);
-                for (var key : overrides.stringPropertyNames()) {
+                var overrides = YamlConfiguration.loadFlat(file);
+                for (var key : overrides.keySet()) {
                     if (!base.containsKey(key)) throw new IllegalArgumentException(
                             "unknown message key " + key + " in " + name);
-                    translated.put(key, overrides.getProperty(key));
+                    translated.put(key, overrides.get(key));
                 }
                 bundles.put(tag, Map.copyOf(translated));
             }

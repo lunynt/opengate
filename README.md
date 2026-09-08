@@ -1,210 +1,80 @@
-# OpenGate
+<div align="center">
+  <img src="assets/banner.png" alt="OpenGate" width="750">
 
-OpenGate is an authentication plugin for modern Minecraft servers. A shared Java 25 core powers separate Bukkit, Spigot, Paper, Velocity, and BungeeCord adapters.
+  <p>Authentication for modern Minecraft servers and proxy networks, with support for premium, offline, and Floodgate players.</p>
 
+  <a href="https://github.com/lunynt/opengate/actions/workflows/build.yml"><img src="https://github.com/lunynt/opengate/actions/workflows/build.yml/badge.svg?branch=main" alt="Build"></a>
+  <a href="https://github.com/lunynt/opengate/stargazers"><img src="https://img.shields.io/github/stars/lunynt/opengate?style=flat" alt="GitHub stars"></a>
+  <a href="https://github.com/lunynt/opengate"><img src="https://img.shields.io/github/repo-size/lunynt/opengate?style=flat" alt="Repository size"></a>
+  <a href="https://hits.sh/github.com/lunynt/opengate/"><img src="https://hits.sh/github.com/lunynt/opengate.svg?label=views" alt="Repository views"></a>
+</div>
 
-## Platforms
+## Features
 
+- Premium auto-login and offline account authentication
+- Floodgate and Geyser support
+- Configurable `/login` and `/register` commands
+- TOTP two-factor authentication
+- Optional login sessions using secure, revocable cookies
+- SQLite by default, with PostgreSQL, MySQL, MariaDB, and H2 support
+- Velocity and BungeeCord proxy support
+- Redis coordination for multi-proxy networks
+- Rate limiting and brute-force protection
+- Per-player translations and configurable messages
+- Permission-required login and 2FA
+- Protected staff accounts
+- Offline player allow-list
+- UUIDv4 to UUIDv7 translation
+- Login and registration dialogs on supported clients
+- Automatic password hash upgrades
+- ajQueue integration
+- API for other plugins
+
+## Supported platforms
+
+- Paper 26.2
+- Bukkit and Spigot 26.2
 - Velocity 4
 - BungeeCord 1.21
-- Bukkit and Spigot 26.2
-- Paper 26.2
 
-## Main principles
+OpenGate requires Java 25.
 
-Authentication is modeled as a fail-closed per-connection state machine. Identity resolution, registration, passwords, TOTP, and release are explicit stages rather than scattered listener flags. Platform code enforces decisions made by the shared core.
+## Installation
 
-- Fail closed when identity or session state cannot be verified
-- Keep password and database work off server threads
-- Work without external services by default
-- Keep platform adapters small and authentication rules in the shared core
-- Limit features to authentication, account security, and server operation
+### Paper / Bukkit / Spigot
 
-## Build
+1. Download the JAR for your platform and place it in `plugins/`.
+2. Start the server once to generate the configuration files.
+3. Edit `plugins/OpenGate/config.properties` and restart.
 
-Requires Java 25. Build and test every module with:
+Keep `online-mode=true` on premium-only servers. Only use offline mode if you want offline players to register and log in.
 
-```bash
-./gradlew clean build
-```
+### Velocity / BungeeCord
 
-Platform JARs are written to `bukkit/build/libs/`, `paper/build/libs/`, `velocity/build/libs/`, and `bungee/build/libs/`. Use `opengate-<platform>-<version>.jar`, not a `-sources.jar`.
+1. Install OpenGate on the proxy, not on every backend.
+2. Add a lightweight authentication server named `limbo`.
+3. Add at least one destination server such as `lobby`.
+4. Put the backends in offline mode and block direct connections to them.
 
-## Standalone Bukkit, Spigot, or Paper install
+More proxy details are covered below.
 
-1. Copy the JAR matching your server into `plugins/` and restart.
-2. Keep `online-mode=true` for premium-only servers. Use `online-mode=false` only when offline players must register.
-3. Edit `plugins/OpenGate/config.properties`, then restart to apply changes.
+## Commands
 
-Install OpenGate only on the game server in this mode.
-
-## Proxy network install
-
-1. Copy the matching Velocity or BungeeCord JAR into the proxy `plugins/` directory. Do not install OpenGate on backend servers.
-2. Register a lightweight authentication server named `limbo` and at least one destination named `lobby`.
-3. Set the proxy to offline mode so OpenGate can select premium or offline authentication per connection.
-4. Put backends in offline mode and allow connections only from the proxy.
-
-For Velocity, use modern forwarding and the same forwarding secret on every Paper backend. Modern forwarding does not replace a firewall. For BungeeCord, enable IP forwarding and Paper's BungeeCord support; legacy forwarding has no cryptographic protection, so a firewall or localhost binding is mandatory. Follow PaperMC's [forwarding](https://docs.papermc.io/velocity/player-information-forwarding/) and [backend security](https://docs.papermc.io/velocity/security/) guides.
-
-## Current authentication flow
-
-- Offline players register with `/register <password> <password>` and return with `/login <password>`.
-- Premium players authenticate automatically. Floodgate players do too when the optional integration is installed and confirms their identity.
-- Offline accounts always require their password; an IP address is never treated as proof of identity.
-- Passwords use versioned Argon2id hashes (`64 MiB`, three iterations); hashing runs on a bounded worker pool.
-- Accounts persist through a bounded HikariCP connection pool. SQLite WAL mode is the zero-configuration default;
-  PostgreSQL, MySQL, MariaDB, and H2 are also supported.
-- Authentication expires after 60 seconds and closes after three incorrect passwords.
-- Reconnects cannot reset brute-force protection: both accounts and IP addresses are limited to ten failures per rolling ten-minute window by default. An address may register five accounts per hour.
-- Paper blocks movement, chat, commands, inventory actions, interaction, damage, and block changes until authentication.
-- Velocity and BungeeCord redirect unauthenticated players to `limbo`, then send them to the first configured lobby after authentication.
-
-Two-factor authentication is available through `/2fa setup <password>`, `/2fa confirm <code>`, `/totp <code>`, and `/2fa disable <password>`. New enrollments use TOTP-HMAC-SHA-256. Existing untagged TOTP credentials remain verifiable with their original HMAC-SHA-1 setting so upgrades do not lock users out. TOTP secrets are encrypted with AES-256-GCM using `plugins/OpenGate/secret.key`; back up this key with the database because losing it makes enrolled TOTP secrets unrecoverable.
-
-Authenticated players can manage their account with:
+Player commands:
 
 ```text
+/register <password> <password>
+/login <password>
+/totp <code>
+/2fa setup <password>
+/2fa confirm <code>
+/2fa disable <password>
 /account password <current> <new>
 /account logout
 /account delete <password> confirm
 ```
 
-Password changes and deletion run Argon2id verification outside the server thread. Logout closes the active authentication session, while deletion removes the account and immediately disconnects the player.
-
-On first launch OpenGate creates `config.properties`, `messages.properties`, `opengate.db`, and `secret.key`. Authentication timing, password bounds, IP limits, premium lookup, authentication routing, lobby order, and player messages can be changed without rebuilding. Messages support standard `&` color codes on every platform. Use `proxy-auth-server` and the comma-separated `proxy-lobby-servers` list when server names differ. Older Velocity-specific property names remain compatible.
-
-Command aliases are independent comma-separated lists. Labels are normalized, and invalid aliases, duplicates, or
-aliases shadowing another primary command prevent startup:
-
-```properties
-command.login.aliases=l,signin
-command.register.aliases=reg,signup
-command.totp.aliases=otp
-```
-
-Paper/Bukkit remap configured aliases before player or server-command dispatch; Velocity and Bungee register the
-same aliases with their native command managers.
-
-Multiple translations can be active simultaneously. Add files such as `messages_lt.properties` or
-`messages_pt_BR.properties`; each file only needs translated overrides. Resolution uses the player's exact locale,
-then language, then `messages.properties`. Unknown translation keys fail startup to expose mistakes.
-
-Set `translate-uuid4-to-uuid7=true` to persistently map UUIDv4 identities to RFC 9562 UUIDv7. All proxies in a
-network must share the mapping database and use the same setting.
-
-Permission-based requirements and protected accounts use permission-node lists:
-
-```properties
-require-login-permissions=group.admin,opengate.require.login
-require-2fa-permissions=group.owner,opengate.require.2fa
-protected-account-permissions=group.owner
-```
-
-Requiring 2FA also requires a password. Players without the required credentials remain inside the authentication
-gate and receive an enrollment flow. Protected players can complete mandatory first-time enrollment, but cannot
-subsequently change passwords, disable 2FA, or delete their accounts.
-
-Modern clients can resume fully authenticated offline sessions through opaque cookies. Only SHA-256 token digests
-are stored in the database; cookies are account-bound, expire, and are revoked by logout, password changes, deletion,
-admin revocation, and API revocation. IP addresses are never accepted as authentication evidence.
-Cookies do not bypass permission-required passwords, enrolled 2FA, or newly required 2FA enrollment.
-Each cookie is also bound to a one-way fingerprint of the account's current password hash and encrypted TOTP value,
-so any credential change invalidates older cookies even if explicit cleanup encounters a transient failure.
-
-The `dev.lunynt.opengate.api.OpenGateApi` interface exposes sanitized user lookup, session snapshots,
-authentication status, and revocation. `revokeSession(connectionId)` returns `CompletionStage<Boolean>`:
-`false` means no local session existed; `true` is returned only after local invalidation, cookie deletion,
-and Redis publication complete. Any failed step completes the result exceptionally. Handle that result
-asynchronously; do not block a platform event thread waiting for database or Redis operations.
-Paper also registers this interface with Bukkit's services manager. Paper, Velocity, and Bungee entry-point classes
-all expose `api()` for integrations that obtain the OpenGate plugin instance from their platform plugin manager.
-
-```properties
-cookie-sessions-enabled=true
-cookie-session-hours=12
-```
-
-Native login/register dialog prompts can be toggled with `minecraft-dialogs-enabled`. Dialogs intentionally prefill
-the normal command instead of collecting passwords in visible, unmasked Minecraft dialog fields.
-Dialog titles and buttons use each player's active message locale. Paper and Bungee expose constructible native
-dialog types. Velocity 4.1 only exposes the `DialogLike` marker and a no-op API default, so its secure text prompt
-remains the supported fallback until Velocity publishes a constructible dialog API.
-
-An optional Redis coordinator resolves simultaneous authentications across proxies using a Redis-ordered sequence;
-the latest successful authentication wins and older connections are disconnected. Redis carries only UUIDs and
-invalidation metadata. The configured SQL database remains durable truth.
-
-```properties
-redis-enabled=true
-redis-uri=rediss://user:password@redis.internal:6379/0
-redis-channel=opengate:production
-redis-timeout-millis=3000
-```
-
-Every proxy must use the same Redis channel, database, UUID translation setting, and secret key. Use `rediss://`
-outside a trusted private network. If Redis initialization or authentication publication fails, OpenGate fails closed.
-Loss of the Redis subscription invalidates local sessions because pub/sub cannot replay missed revocations.
-Authentication publication is rejected until the subscription is acknowledged again. In-flight publications
-also fail if the subscription disconnects during them. Players must reconnect after an interruption.
-
-ajQueue 2.9.1 integration is optional and uses its official API:
-
-```properties
-ajqueue-enabled=true
-ajqueue-target=survival
-```
-
-When enabled, ajQueue must load on the proxy. Authenticated players are submitted to the configured queue instead of
-bypassing it through a direct lobby connection. A missing integration fails plugin startup and releases OpenGate's
-resources. A rejected or failed enqueue disconnects the player with the localized `queue-unavailable` message.
-
-Enable the offline allow-list with `offline-whitelist-enabled=true` and configure comma-separated, case-insensitive
-Minecraft names in `offline-whitelist`. Premium identities remain unaffected.
-
-### Database configuration
-
-Set `database-type` to `sqlite`, `postgresql`, `mysql`, `mariadb`, or `h2`. SQLite needs no other setting.
-For a remote database, configure the JDBC URL and credentials:
-
-```properties
-database-type=postgresql
-database-url=jdbc:postgresql://database.internal:5432/opengate
-database-username=opengate
-database-password=change-me
-database-pool-size=10
-database-connection-timeout-millis=5000
-```
-
-Create the database itself and a least-privilege database user before starting OpenGate. Never commit a populated
-configuration file or reuse the database password for another service.
-
-For immutable or orchestrated deployments, infrastructure settings can be injected without modifying the generated
-file. `OPENGATE_DATABASE_TYPE`, `OPENGATE_DATABASE_URL`, `OPENGATE_DATABASE_USERNAME`,
-`OPENGATE_DATABASE_PASSWORD`, `OPENGATE_DATABASE_POOL_SIZE`, and
-`OPENGATE_DATABASE_CONNECTION_TIMEOUT_MILLIS` override their corresponding database properties. Redis supports
-`OPENGATE_REDIS_ENABLED`, `OPENGATE_REDIS_URI`, `OPENGATE_REDIS_CHANNEL`, and
-`OPENGATE_REDIS_TIMEOUT_MILLIS`. Set `OPENGATE_SECRET_KEY` to Base64 encoding of exactly 32 random bytes to share
-one encryption root across replicas without writing `secret.key`; environment values take precedence and are never
-copied into `config.properties`.
-
-CI can enable live remote-database coverage with `OPENGATE_TEST_POSTGRESQL_URL`, `OPENGATE_TEST_MYSQL_URL`, and
-`OPENGATE_TEST_MARIADB_URL`, plus their matching `_USERNAME` and `_PASSWORD` variables. Use a dedicated test
-database: the test applies OpenGate migrations and inserts uniquely named test accounts without altering existing rows.
-
-Standard SQLite JDBC does not include portable database encryption, so OpenGate does not present the database as password-protected. Passwords are one-way Argon2id hashes, TOTP secrets use AES-256-GCM, audit addresses use keyed HMAC fingerprints, and POSIX storage is restricted to its owner. Back up `opengate.db` and `secret.key` together and keep filesystem access private.
-
-## Floodgate and Geyser
-
-Install Geyser and Floodgate on the same proxy or server as OpenGate; no additional OpenGate setting is required. OpenGate uses Floodgate's live API and never trusts username prefixes alone. If Floodgate is absent or its API cannot confirm a Bedrock player, authentication fails closed and the normal premium/offline rules apply. On proxy networks, keep Geyser and Floodgate at the proxy layer alongside the OpenGate proxy JAR.
-
-## Security notes
-
-Offline-mode passwords are Minecraft command arguments and are not end-to-end encrypted by OpenGate. Use encrypted transport where your platform supports it, lock backend ports to the proxy, restrict access to `plugins/OpenGate/`, and never share `secret.key`. Rotate exposed credentials immediately. Audit records are retained for 90 days and store keyed address fingerprints rather than raw addresses.
-
-The SQLite schema is versioned and upgraded transactionally. Security events are written to `audit_events`, including logins, failures, rate limits, registration, password changes, session revocation, account deletion, and TOTP changes. Client addresses are stored only as keyed HMAC-SHA256 fingerprints, allowing correlation without retaining raw IP addresses.
-
-Operators with `opengate.admin` can use:
+Admin commands require `opengate.admin`:
 
 ```text
 /opengate lookup <player>
@@ -212,7 +82,106 @@ Operators with `opengate.admin` can use:
 /opengate revoke <player>
 ```
 
-Admin lookups, audit reads, and revocations are themselves audited. Lookup output intentionally excludes addresses and password/TOTP material.
+## Configuration
+
+OpenGate creates `config.properties`, `messages.properties`, `opengate.db`, and `secret.key` on first launch. For most servers, the default SQLite setup is enough.
+
+To use another database:
+
+```properties
+database-type=postgresql
+database-url=jdbc:postgresql://database.internal:5432/opengate
+database-username=opengate
+database-password=change-me
+database-pool-size=10
+```
+
+Valid database types are `sqlite`, `postgresql`, `mysql`, `mariadb`, and `h2`.
+
+Command aliases are comma-separated:
+
+```properties
+command.login.aliases=l,signin
+command.register.aliases=reg,signup
+command.totp.aliases=otp
+```
+
+You can require stronger authentication for staff and protect sensitive accounts from credential changes:
+
+```properties
+require-login-permissions=group.admin
+require-2fa-permissions=group.owner
+protected-account-permissions=group.owner
+```
+
+Add translation files such as `messages_lt.properties` or `messages_pt_BR.properties`. OpenGate uses the player's exact locale first, then the base language, then `messages.properties`.
+
+Database, Redis, and secret-key settings can also come from environment variables for containerized deployments.
+
+## Proxy setup
+
+Unauthenticated players are sent to the server configured by `proxy-auth-server`, which defaults to `limbo`. After login, they are sent to the first available server in `proxy-lobby-servers`.
+
+Velocity networks should use modern forwarding with the same forwarding secret on every backend. BungeeCord networks need IP forwarding enabled. In both cases, use a firewall or private network so players can't connect to backend servers directly.
+
+See PaperMC's [player forwarding](https://docs.papermc.io/velocity/player-information-forwarding/) and [backend security](https://docs.papermc.io/velocity/security/) guides if you're setting up a new proxy network.
+
+## Security
+
+Passwords are hashed with Argon2id, and old supported hashes are upgraded after a successful login. Password hashing runs asynchronously so it doesn't block the server thread.
+
+TOTP secrets are encrypted with AES-256-GCM. Back up `secret.key` together with your database. Losing that key means enrolled TOTP secrets can't be recovered.
+
+OpenGate rate-limits failed logins and registrations. IP addresses are never accepted as proof of identity, and audit logs store keyed fingerprints instead of raw addresses. If authentication can't be verified safely, the connection is rejected.
+
+SQLite is a normal database file, so protect the whole `plugins/OpenGate/` directory and keep backups of both `opengate.db` and `secret.key`. Proxy backends should never be exposed directly to the internet.
+
+Modern clients can optionally resume authenticated sessions using cookies. Logout, password changes, account deletion, and session revocation invalidate them.
+
+## Integrations
+
+### Floodgate / Geyser
+
+Install Floodgate alongside OpenGate on the server or proxy. Verified Bedrock players can log in automatically without relying on username prefixes.
+
+### Redis
+
+If you're running multiple proxies, Redis keeps authentication sessions in sync:
+
+```properties
+redis-enabled=true
+redis-uri=rediss://user:password@redis.internal:6379/0
+redis-channel=opengate:production
+```
+
+Every proxy should use the same Redis channel, database, `secret.key`, and UUID settings. If Redis becomes unavailable, OpenGate rejects authentication rather than risking inconsistent sessions.
+
+### ajQueue
+
+OpenGate can send authenticated players into an ajQueue queue instead of connecting them directly:
+
+```properties
+ajqueue-enabled=true
+ajqueue-target=survival
+```
+
+Install ajQueue on the same proxy before enabling the integration.
+
+## API
+
+Other plugins can access OpenGate through `dev.lunynt.opengate.api.OpenGateApi` to check authentication state, look up accounts, inspect sessions, and revoke sessions.
+
+Paper registers the API with Bukkit's services manager. The Paper, Velocity, and BungeeCord plugin entry points also expose `api()`.
+
+## Building
+
+Use the checked-in Gradle wrapper:
+
+```bash
+./gradlew clean build
+```
+
+Platform JARs are generated in `paper/build/libs/`, `bukkit/build/libs/`, `velocity/build/libs/`, and `bungee/build/libs/`. Use the platform JAR, not the sources JAR.
 
 ## License
 

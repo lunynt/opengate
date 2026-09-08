@@ -39,6 +39,8 @@ public final class OpenGatePaperPlugin extends JavaPlugin {
         configureCommand("totp", commands);
         configureCommand("2fa", commands);
         configureCommand("account", commands);
+        configureCommand("premium", commands);
+        configureCommand("cracked", commands);
         configureCommand("opengate", new PaperAdminCommand(this));
         getLogger().info("OpenGate authentication engine enabled on Paper");
     }

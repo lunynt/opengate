@@ -15,7 +15,9 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
         REGISTER,
         TOTP,
         MANAGE_TOTP,
-        ACCOUNT
+        ACCOUNT,
+        PREMIUM,
+        CRACKED
     }
 
     private final OpenGateVelocityPlugin plugin;
@@ -38,7 +40,57 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
             case TOTP -> totp(player, invocation.arguments());
             case MANAGE_TOTP -> manageTotp(player, invocation.arguments());
             case ACCOUNT -> manageAccount(player, invocation.arguments());
+            case PREMIUM -> changeIdentity(player, invocation.arguments(), IdentityType.PREMIUM);
+            case CRACKED -> changeIdentity(player, invocation.arguments(), IdentityType.OFFLINE);
         }
+    }
+
+    private void changeIdentity(Player player, String[] arguments, IdentityType target) {
+        if (!isReleased(player) || arguments.length != 1) {
+            player.sendMessage(message(player, target == IdentityType.PREMIUM ? "usage-premium" : "usage-cracked"));
+            return;
+        }
+        if (isProtected(player)) {
+            player.sendMessage(message(player, "protected-account"));
+            return;
+        }
+        var account = plugin.openGate().accounts().find(accountId(player)).orElse(null);
+        if (account == null) {
+            player.sendMessage(message(player, "account-action-failed"));
+            return;
+        }
+        if (account.identityType() == target) {
+            player.sendMessage(message(player,
+                    target == IdentityType.PREMIUM ? "premium-already-enabled" : "cracked-already-enabled"));
+            return;
+        }
+        plugin.server().getScheduler().buildTask(plugin, () -> {
+            if (target == IdentityType.PREMIUM) {
+                var profile = plugin.openGate().identities().premiumProfile(account.username());
+                if (profile.status() != dev.lunynt.opengate.identity.ProfileLookupResult.Status.FOUND) {
+                    player.sendMessage(message(player, profile.status()
+                            == dev.lunynt.opengate.identity.ProfileLookupResult.Status.NOT_FOUND
+                            ? "premium-profile-not-found" : "premium-profile-unavailable"));
+                    return;
+                }
+                if (!profile.profile().username().equals(account.username())) {
+                    player.sendMessage(message(player, "premium-name-mismatch"));
+                    return;
+                }
+            }
+            var password = arguments[0].toCharArray();
+            try {
+                plugin.openGate().accounts().changeIdentityType(account.playerId(), password, target, address(player))
+                        .whenComplete((result, error) -> accountCallback(player, result, error, () -> {
+                        plugin.clearSessionCookie(player, account.playerId());
+                        plugin.openGate().sessions().close(player.getUniqueId());
+                        player.disconnect(message(player,
+                                target == IdentityType.PREMIUM ? "premium-enabled" : "cracked-enabled"));
+                        }));
+            } finally {
+                Arrays.fill(password, '\0');
+            }
+        }).schedule();
     }
 
     private void register(Player player, String[] arguments) {
@@ -60,7 +112,7 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
         session.beginRegistration();
         plugin.openGate()
                 .accounts()
-                .register(accountId(player), player.getUsername(), IdentityType.OFFLINE, password, address)
+                .register(accountId(player), player.getUsername(), session.identity().orElseThrow().type(), password, address)
                 .whenComplete((account, error) -> {
                     if (!isCurrent(player, session)) return;
                     if (error != null) {

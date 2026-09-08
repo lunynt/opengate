@@ -90,7 +90,9 @@ class OpenGateConfigTest {
     void rejectsInvalidBoolean() throws Exception {
         OpenGateConfig.load(directory);
         var file = directory.resolve("config.yml");
-        Files.writeString(file, Files.readString(file).replace("enabled: true\n    timeout-millis", "enabled: maybe\n    timeout-millis"));
+        Files.writeString(file, Files.readString(file).replace(
+                "enabled: true\n    # Automatically select premium mode",
+                "enabled: maybe\n    # Automatically select premium mode"));
 
         assertThrows(IllegalArgumentException.class, () -> OpenGateConfig.load(directory));
     }

@@ -31,8 +31,60 @@ final class BungeeAuthenticationCommand extends Command {
             case "totp" -> totp(player, arguments);
             case "2fa" -> manageTotp(player, arguments);
             case "account" -> manageAccount(player, arguments);
+            case "premium" -> changeIdentity(player, arguments, IdentityType.PREMIUM);
+            case "cracked" -> changeIdentity(player, arguments, IdentityType.OFFLINE);
             default -> throw new IllegalStateException("unknown authentication command");
         }
+    }
+
+    private void changeIdentity(ProxiedPlayer player, String[] arguments, IdentityType target) {
+        if (!isReleased(player) || arguments.length != 1) {
+            player.sendMessage(plugin.message(player,
+                    target == IdentityType.PREMIUM ? "usage-premium" : "usage-cracked"));
+            return;
+        }
+        if (isProtected(player)) {
+            player.sendMessage(plugin.message(player, "protected-account"));
+            return;
+        }
+        var account = plugin.openGate().accounts().find(accountId(player)).orElse(null);
+        if (account == null) {
+            player.sendMessage(plugin.message(player, "account-action-failed"));
+            return;
+        }
+        if (account.identityType() == target) {
+            player.sendMessage(plugin.message(player,
+                    target == IdentityType.PREMIUM ? "premium-already-enabled" : "cracked-already-enabled"));
+            return;
+        }
+        plugin.proxy().getScheduler().runAsync(plugin, () -> {
+            if (target == IdentityType.PREMIUM) {
+                var profile = plugin.openGate().identities().premiumProfile(account.username());
+                if (profile.status() != dev.lunynt.opengate.identity.ProfileLookupResult.Status.FOUND) {
+                    player.sendMessage(plugin.message(player, profile.status()
+                            == dev.lunynt.opengate.identity.ProfileLookupResult.Status.NOT_FOUND
+                            ? "premium-profile-not-found" : "premium-profile-unavailable"));
+                    return;
+                }
+                if (!profile.profile().username().equals(account.username())) {
+                    player.sendMessage(plugin.message(player, "premium-name-mismatch"));
+                    return;
+                }
+            }
+            var password = arguments[0].toCharArray();
+            try {
+                plugin.openGate().accounts().changeIdentityType(
+                        account.playerId(), password, target, BungeeAuthenticationListener.address(player))
+                        .whenComplete((result, error) -> accountCallback(player, result, error, () -> {
+                        plugin.clearSessionCookie(player, account.playerId());
+                        plugin.openGate().sessions().close(player.getUniqueId());
+                        player.disconnect(plugin.message(player,
+                                target == IdentityType.PREMIUM ? "premium-enabled" : "cracked-enabled"));
+                        }));
+            } finally {
+                Arrays.fill(password, '\0');
+            }
+        });
     }
 
     private void register(ProxiedPlayer player, String[] arguments) {
@@ -56,7 +108,7 @@ final class BungeeAuthenticationCommand extends Command {
                     .register(
                             accountId(player),
                             player.getName(),
-                            IdentityType.OFFLINE,
+                            session.identity().orElseThrow().type(),
                             password,
                             BungeeAuthenticationListener.address(player))
                     .whenComplete((account, error) -> {

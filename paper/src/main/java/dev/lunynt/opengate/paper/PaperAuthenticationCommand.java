@@ -34,8 +34,60 @@ final class PaperAuthenticationCommand implements CommandExecutor {
             case "totp" -> totp(player, arguments);
             case "2fa" -> manageTotp(player, arguments);
             case "account" -> manageAccount(player, arguments);
+            case "premium" -> changeIdentity(player, arguments, IdentityType.PREMIUM);
+            case "cracked" -> changeIdentity(player, arguments, IdentityType.OFFLINE);
             default -> false;
         };
+    }
+
+    private boolean changeIdentity(Player player, String[] arguments, IdentityType target) {
+        if (!isReleased(player) || arguments.length != 1) {
+            player.sendMessage(message(player, target == IdentityType.PREMIUM ? "usage-premium" : "usage-cracked"));
+            return true;
+        }
+        if (isProtected(player)) {
+            player.sendMessage(message(player, "protected-account"));
+            return true;
+        }
+        var account = plugin.openGate().accounts().find(accountId(player)).orElse(null);
+        if (account == null) {
+            player.sendMessage(message(player, "account-action-failed"));
+            return true;
+        }
+        if (account.identityType() == target) {
+            player.sendMessage(message(player,
+                    target == IdentityType.PREMIUM ? "premium-already-enabled" : "cracked-already-enabled"));
+            return true;
+        }
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            if (target == IdentityType.PREMIUM) {
+                var profile = plugin.openGate().identities().premiumProfile(account.username());
+                if (profile.status() != dev.lunynt.opengate.identity.ProfileLookupResult.Status.FOUND) {
+                    plugin.getServer().getScheduler().runTask(plugin, () -> player.sendMessage(message(player,
+                            profile.status() == dev.lunynt.opengate.identity.ProfileLookupResult.Status.NOT_FOUND
+                                    ? "premium-profile-not-found" : "premium-profile-unavailable")));
+                    return;
+                }
+                if (!profile.profile().username().equals(account.username())) {
+                    plugin.getServer().getScheduler().runTask(plugin,
+                            () -> player.sendMessage(message(player, "premium-name-mismatch")));
+                    return;
+                }
+            }
+            var password = arguments[0].toCharArray();
+            try {
+                plugin.openGate().accounts().changeIdentityType(account.playerId(), password, target, address(player))
+                        .whenComplete((result, error) -> runAccountCallback(player, result, error, () -> {
+                        plugin.clearSessionCookie(player, account.playerId());
+                        plugin.openGate().sessions().close(player.getUniqueId());
+                        player.kickPlayer(message(player,
+                                target == IdentityType.PREMIUM ? "premium-enabled" : "cracked-enabled"));
+                        }));
+            } finally {
+                Arrays.fill(password, '\0');
+            }
+        });
+        return true;
     }
 
     private boolean register(Player player, String[] arguments) {
@@ -57,7 +109,7 @@ final class PaperAuthenticationCommand implements CommandExecutor {
         session.beginRegistration();
         plugin.openGate()
                 .accounts()
-                .register(accountId(player), player.getName(), IdentityType.OFFLINE, password, address)
+                .register(accountId(player), player.getName(), session.identity().orElseThrow().type(), password, address)
                 .whenComplete((account, error) -> plugin.getServer().getScheduler().runTask(plugin, () -> {
                     if (!isCurrent(player, session)) return;
                     if (error != null) {

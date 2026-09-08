@@ -176,6 +176,17 @@ public final class AccountService implements AutoCloseable {
                 AuditEventType.ACCOUNT_DELETED);
     }
 
+    public CompletableFuture<AccountActionResult> changeIdentityType(
+            UUID playerId, char[] currentPassword, IdentityType identityType, String address) {
+        Objects.requireNonNull(identityType, "identityType");
+        return authenticatedAction(
+                playerId,
+                currentPassword,
+                address,
+                (account, secrets) -> accounts.updateIdentityType(account.playerId(), identityType),
+                AuditEventType.IDENTITY_CHANGED);
+    }
+
     private CompletableFuture<AccountActionResult> authenticatedAction(
             UUID playerId,
             char[] currentPassword,

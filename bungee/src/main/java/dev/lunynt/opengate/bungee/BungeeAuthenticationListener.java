@@ -109,8 +109,10 @@ final class BungeeAuthenticationListener implements Listener {
         var address = address(player);
         plugin.openGate().sessions().close(playerId);
         var session = plugin.openGate().sessions().open(playerId);
-        var accountId = plugin.openGate().identityIds().translate(playerId);
-        var account = plugin.openGate().accounts().find(accountId);
+        var translatedId = plugin.openGate().identityIds().translate(playerId);
+        var account = plugin.openGate().accounts().find(player.getName())
+                .or(() -> plugin.openGate().accounts().find(translatedId));
+        var accountId = account.map(dev.lunynt.opengate.account.Account::playerId).orElse(translatedId);
         byte[] cookie;
         try {
             cookie = player.retrieveCookie(OpenGateBungeePlugin.SESSION_COOKIE)
@@ -122,16 +124,20 @@ final class BungeeAuthenticationListener implements Listener {
             cookie = null;
         }
         var cookieValid = account.isPresent() && plugin.openGate().cookieSessions().verify(accountId, cookie).join();
+        var identityType = plugin.floodgate().isPlayer(playerId)
+                ? IdentityType.FLOODGATE
+                : player.getPendingConnection().isOnlineMode() ? IdentityType.PREMIUM : IdentityType.OFFLINE;
+        var requirements = plugin.openGate().config().authenticationRequirements()
+                .forPermissions(player::hasPermission);
         session.resolve(new ResolvedIdentity(
                 player.getName(),
                 accountId,
-                plugin.floodgate().isPlayer(playerId)
-                        ? IdentityType.FLOODGATE
-                        : player.getPendingConnection().isOnlineMode() ? IdentityType.PREMIUM : IdentityType.OFFLINE,
+                identityType,
                 account.isPresent(),
-                account.map(value -> value.passwordHash() != null).orElse(false),
+                account.map(value -> value.passwordHash() != null
+                        && (identityType == IdentityType.OFFLINE || requirements.passwordRequired())).orElse(false),
                 account.map(value -> value.totpSecret() != null).orElse(false)),
-                plugin.openGate().config().authenticationRequirements().forPermissions(player::hasPermission));
+                requirements);
 
         if (cookieValid && session.state() != AuthenticationState.AWAITING_REGISTRATION
                 && session.state() != AuthenticationState.AWAITING_TOTP_ENROLLMENT) {

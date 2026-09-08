@@ -100,6 +100,11 @@ public final class JdbcAccountRepository implements AccountRepository {
         updateCredential("totp_secret", playerId, encryptedSecret);
     }
 
+    @Override
+    public void updateIdentityType(UUID playerId, dev.lunynt.opengate.auth.IdentityType identityType) {
+        updateCredential("identity_type", playerId, identityType.name());
+    }
+
     private void updateCredential(String column, UUID playerId, String value) {
         var sql = "UPDATE accounts SET " + column + " = ? WHERE player_id = ?";
         try (var connection = dataSource.getConnection(); var statement = connection.prepareStatement(sql)) {

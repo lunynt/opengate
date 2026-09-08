@@ -52,8 +52,10 @@ final class PaperAuthenticationListener implements Listener {
                 } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException exception) {
                     cookie = null;
                 }
-                var accountId = plugin.openGate().identityIds().translate(playerId);
-                var account = plugin.openGate().accounts().find(accountId);
+                var translatedId = plugin.openGate().identityIds().translate(playerId);
+                var account = plugin.openGate().accounts().find(player.getName())
+                        .or(() -> plugin.openGate().accounts().find(translatedId));
+                var accountId = account.map(dev.lunynt.opengate.account.Account::playerId).orElse(translatedId);
                 var cookieValid = account.isPresent()
                         && plugin.openGate().cookieSessions().verify(accountId, cookie).get();
                 plugin.getServer().getScheduler().runTask(plugin, () -> finishJoin(
@@ -88,16 +90,18 @@ final class PaperAuthenticationListener implements Listener {
             player.kickPlayer(message(player, "offline-not-whitelisted"));
             return;
         }
-        var playerId = player.getUniqueId();
         var registered = account.isPresent();
+        var requirements = plugin.openGate().config().authenticationRequirements()
+                .forPermissions(player::hasPermission);
         session.resolve(new ResolvedIdentity(
                 player.getName(),
                 accountId,
                 identityType,
                 registered,
-                account.map(value -> value.passwordHash() != null).orElse(false),
+                account.map(value -> value.passwordHash() != null
+                        && (identityType == IdentityType.OFFLINE || requirements.passwordRequired())).orElse(false),
                 account.map(value -> value.totpSecret() != null).orElse(false)),
-                plugin.openGate().config().authenticationRequirements().forPermissions(player::hasPermission));
+                requirements);
 
         if (cookieValid && session.state() != AuthenticationState.AWAITING_REGISTRATION
                 && session.state() != AuthenticationState.AWAITING_TOTP_ENROLLMENT) {

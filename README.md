@@ -72,6 +72,8 @@ Player commands:
 /account password <current> <new>
 /account logout
 /account delete <password> confirm
+/premium <password>
+/cracked <password>
 ```
 
 Admin commands require `opengate.admin`:
@@ -119,6 +121,8 @@ authentication:
   require-2fa-permissions: [group.owner]
   protected-account-permissions: [group.owner]
 ```
+
+New names use offline registration by default. After logging in, a Java player can run `/premium <password>` to enable Microsoft authentication for that account. OpenGate checks the Mojang profile and requires the exact profile name casing, then verifies ownership during the next connection. `/cracked <password>` switches back to password login. Set `authentication.premium-lookup.auto-detect: true` if you prefer automatic premium detection for new names.
 
 Add translation files such as `messages_lt.yml` or `messages_pt_BR.yml`. OpenGate uses the player's exact locale first, then the base language, then `messages.yml`.
 

@@ -50,6 +50,8 @@ public final class OpenGateBungeePlugin extends Plugin {
         plugins.registerCommand(this, authenticationCommand("totp"));
         plugins.registerCommand(this, authenticationCommand("2fa"));
         plugins.registerCommand(this, authenticationCommand("account"));
+        plugins.registerCommand(this, authenticationCommand("premium"));
+        plugins.registerCommand(this, authenticationCommand("cracked"));
         plugins.registerCommand(this, new BungeeAdminCommand(
                 this, openGate.config().commands().aliases("opengate").toArray(String[]::new)));
         getLogger().info("OpenGate authentication engine enabled on BungeeCord");

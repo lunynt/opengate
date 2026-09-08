@@ -44,4 +44,8 @@ public record Account(
     public Account withPasswordHash(String newPasswordHash) {
         return new Account(playerId, username, identityType, newPasswordHash, totpSecret, createdAt);
     }
+
+    public Account withIdentityType(IdentityType newIdentityType) {
+        return new Account(playerId, username, newIdentityType, passwordHash, totpSecret, createdAt);
+    }
 }

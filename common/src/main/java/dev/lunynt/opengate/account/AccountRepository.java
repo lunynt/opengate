@@ -18,6 +18,10 @@ public interface AccountRepository extends AutoCloseable {
         save(findByPlayerId(playerId).orElseThrow().withTotpSecret(encryptedSecret));
     }
 
+    default void updateIdentityType(UUID playerId, dev.lunynt.opengate.auth.IdentityType identityType) {
+        save(findByPlayerId(playerId).orElseThrow().withIdentityType(identityType));
+    }
+
     boolean claimTotpStep(UUID playerId, long step);
 
     void delete(UUID playerId);

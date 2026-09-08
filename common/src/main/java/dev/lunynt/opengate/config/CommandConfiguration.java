@@ -12,7 +12,8 @@ import java.util.regex.Pattern;
 
 public record CommandConfiguration(Map<String, List<String>> aliases) {
     private static final Pattern VALID_LABEL = Pattern.compile("[a-z0-9][a-z0-9_-]{0,31}");
-    private static final List<String> COMMANDS = List.of("login", "register", "totp", "2fa", "account", "opengate");
+    private static final List<String> COMMANDS = List.of(
+            "login", "register", "totp", "2fa", "account", "premium", "cracked", "opengate");
 
     public CommandConfiguration {
         var copy = new LinkedHashMap<String, List<String>>();

@@ -93,6 +93,16 @@ public final class OpenGateVelocityPlugin {
                         .plugin(this).build(),
                 new VelocityAuthenticationCommand(this, VelocityAuthenticationCommand.Type.ACCOUNT));
         commandManager.register(
+                commandManager.metaBuilder("premium")
+                        .aliases(openGate.config().commands().aliases("premium").toArray(String[]::new))
+                        .plugin(this).build(),
+                new VelocityAuthenticationCommand(this, VelocityAuthenticationCommand.Type.PREMIUM));
+        commandManager.register(
+                commandManager.metaBuilder("cracked")
+                        .aliases(openGate.config().commands().aliases("cracked").toArray(String[]::new))
+                        .plugin(this).build(),
+                new VelocityAuthenticationCommand(this, VelocityAuthenticationCommand.Type.CRACKED));
+        commandManager.register(
                 commandManager.metaBuilder("opengate")
                         .aliases(openGate.config().commands().aliases("opengate").toArray(String[]::new))
                         .plugin(this).build(),

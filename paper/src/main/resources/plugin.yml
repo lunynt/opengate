@@ -22,6 +22,12 @@ commands:
   account:
     description: Manage your OpenGate account
     usage: /account <password|logout|delete>
+  premium:
+    description: Use Microsoft authentication for this account
+    usage: /premium <password>
+  cracked:
+    description: Use password authentication for this account
+    usage: /cracked <password>
   opengate:
     description: Administer OpenGate accounts
     usage: /opengate <lookup|audit|revoke>

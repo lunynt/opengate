@@ -146,6 +146,7 @@ public final class OpenGate implements AutoCloseable {
                             repository,
                             profiles,
                             config.premiumLookupEnabled(),
+                            config.premiumAutoDetect(),
                             config.offlineWhitelist()::allows),
                     new TotpEnrollmentService(
                             repository,

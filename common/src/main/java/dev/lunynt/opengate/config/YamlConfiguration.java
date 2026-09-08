@@ -177,6 +177,7 @@ final class YamlConfiguration {
         add(keys, "authentication.password.minimum-length", "minimum-password-length");
         add(keys, "authentication.password.maximum-length", "maximum-password-length");
         add(keys, "authentication.premium-lookup.enabled", "premium-lookup-enabled");
+        add(keys, "authentication.premium-lookup.auto-detect", "premium-auto-detect");
         add(keys, "authentication.premium-lookup.timeout-millis", "premium-lookup-timeout-millis");
         add(keys, "authentication.require-login-permissions", "require-login-permissions");
         add(keys, "authentication.require-2fa-permissions", "require-2fa-permissions");
@@ -189,7 +190,7 @@ final class YamlConfiguration {
         add(keys, "database.password", "database-password");
         add(keys, "database.pool-size", "database-pool-size");
         add(keys, "database.connection-timeout-millis", "database-connection-timeout-millis");
-        for (var command : List.of("login", "register", "totp", "2fa", "account", "opengate")) {
+        for (var command : List.of("login", "register", "totp", "2fa", "account", "premium", "cracked", "opengate")) {
             add(keys, "commands." + command + ".aliases", "command." + command + ".aliases");
         }
         add(keys, "identity.translate-uuid4-to-uuid7", "translate-uuid4-to-uuid7");

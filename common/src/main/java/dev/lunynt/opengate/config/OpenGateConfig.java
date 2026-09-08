@@ -22,6 +22,7 @@ public record OpenGateConfig(
         int minimumPasswordLength,
         int maximumPasswordLength,
         boolean premiumLookupEnabled,
+        boolean premiumAutoDetect,
         Duration premiumLookupTimeout,
         String limboServer,
         List<String> lobbyServers,
@@ -57,6 +58,8 @@ public record OpenGateConfig(
               premium-lookup:
                 # Check Mojang before treating a player as offline.
                 enabled: true
+                # Automatically select premium mode for new names. Leave this off to require /premium.
+                auto-detect: false
                 timeout-millis: 3000
               # Players with these permissions must use a password or 2FA.
               require-login-permissions: []
@@ -92,6 +95,10 @@ public record OpenGateConfig(
               2fa:
                 aliases: []
               account:
+                aliases: []
+              premium:
+                aliases: []
+              cracked:
                 aliases: []
               opengate:
                 aliases: []
@@ -193,6 +200,7 @@ public record OpenGateConfig(
                 integer(properties, "minimum-password-length"),
                 integer(properties, "maximum-password-length"),
                 bool(properties, "premium-lookup-enabled"),
+                bool(properties, "premium-auto-detect", false),
                 Duration.ofMillis(integer(properties, "premium-lookup-timeout-millis")),
                 compatible(properties, "proxy-auth-server", "velocity-limbo-server", "limbo"),
                 compatible(properties, "proxy-lobby-servers", "velocity-lobby-servers", "lobby").lines()

@@ -83,6 +83,19 @@ class AccountServiceTest {
                     .join();
 
             assertEquals(
+                    AccountActionResult.WRONG_PASSWORD,
+                    service.changeIdentityType(
+                                    playerId, "wrong password".toCharArray(), IdentityType.PREMIUM, "127.0.0.1")
+                            .join());
+            assertEquals(IdentityType.OFFLINE, service.find(playerId).orElseThrow().identityType());
+            assertEquals(
+                    AccountActionResult.SUCCESS,
+                    service.changeIdentityType(
+                                    playerId, "old password".toCharArray(), IdentityType.PREMIUM, "127.0.0.1")
+                            .join());
+            assertEquals(IdentityType.PREMIUM, service.find(playerId).orElseThrow().identityType());
+
+            assertEquals(
                     AccountActionResult.SUCCESS,
                     service.changePassword(
                                     playerId,

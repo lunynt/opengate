@@ -113,6 +113,7 @@ final class VelocityAuthenticationListener {
         if (session.state() == AuthenticationState.AUTHENTICATED) {
             session.release();
             player.sendMessage(plugin.message(player, "automatic-login"));
+            plugin.connectToLobby(player);
         } else if (session.state() == AuthenticationState.AWAITING_REGISTRATION) {
             player.sendMessage(plugin.message(player, "register-prompt"));
         } else if (session.state() == AuthenticationState.AWAITING_TOTP_ENROLLMENT) {

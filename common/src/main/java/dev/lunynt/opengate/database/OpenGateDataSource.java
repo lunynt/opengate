@@ -14,6 +14,7 @@ public final class OpenGateDataSource implements DataSource, AutoCloseable {
         type = database.type();
         var config = new HikariConfig();
         config.setPoolName("opengate-database");
+        config.setDriverClassName(type.driverClassName());
         config.setJdbcUrl(database.jdbcUrl());
         if (!database.username().isEmpty()) config.setUsername(database.username());
         if (!database.password().isEmpty()) config.setPassword(database.password());

@@ -32,12 +32,12 @@
 
 ## Supported platforms
 
-- Paper 26.2
-- Bukkit and Spigot 26.2
+- Paper 1.21 through the latest release
+- Bukkit and Spigot 1.21 through the latest release
 - Velocity 4
-- BungeeCord 1.21
+- Latest BungeeCord
 
-OpenGate requires Java 25.
+Paper, Bukkit, Spigot, and BungeeCord require Java 21 or newer. Velocity requires Java 25.
 
 ## Installation
 

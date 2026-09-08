@@ -2,9 +2,12 @@ plugins {
     id("com.gradleup.shadow")
 }
 
+val spigotApiVersion = providers.gradleProperty("spigotApiVersion").getOrElse("1.21-R0.1-SNAPSHOT")
+
 dependencies {
     implementation(project(":common"))
-    compileOnly("org.spigotmc:spigot-api:26.2-R0.1-SNAPSHOT")
+    compileOnly("org.spigotmc:spigot-api:$spigotApiVersion")
+    compileOnly("org.jetbrains:annotations-java5:24.1.0")
 }
 
 base {

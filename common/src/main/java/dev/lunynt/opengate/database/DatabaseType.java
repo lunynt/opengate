@@ -9,6 +9,16 @@ public enum DatabaseType {
     MARIADB,
     H2;
 
+    public String driverClassName() {
+        return switch (this) {
+            case SQLITE -> "org.sqlite.JDBC";
+            case POSTGRESQL -> "org.postgresql.Driver";
+            case MYSQL -> "com.mysql.cj.jdbc.Driver";
+            case MARIADB -> "org.mariadb.jdbc.Driver";
+            case H2 -> "org.h2.Driver";
+        };
+    }
+
     public static DatabaseType parse(String value) {
         try {
             return valueOf(value.trim().toUpperCase(Locale.ROOT));

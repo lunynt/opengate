@@ -2,7 +2,7 @@ name: OpenGate
 version: '0.1.0-SNAPSHOT'
 main: dev.lunynt.opengate.paper.OpenGatePaperPlugin
 description: Authentication gateway for Bukkit, Spigot, and Paper
-api-version: '26.2'
+api-version: '1.21'
 softdepend: [floodgate]
 commands:
   login:

@@ -10,6 +10,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        spigot-api:
+          - 1.21-R0.1-SNAPSHOT
+          - 26.2-R0.1-SNAPSHOT
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -19,4 +24,4 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         with:
           validate-wrappers: true
-      - run: ./gradlew clean build --no-daemon
+      - run: ./gradlew clean build --no-daemon -PspigotApiVersion=${{ matrix.spigot-api }}

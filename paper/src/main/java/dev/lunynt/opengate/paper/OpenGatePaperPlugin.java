@@ -96,15 +96,26 @@ public final class OpenGatePaperPlugin extends JavaPlugin {
         var locale = java.util.Locale.forLanguageTag(player.getLocale().replace('_', '-'));
         var title = new net.md_5.bungee.api.chat.TextComponent(openGate.messages().get(
                 locale, registration ? "dialog-register-title" : "dialog-login-title"));
-        var button = new net.md_5.bungee.api.dialog.action.ActionButton(
-                new net.md_5.bungee.api.chat.TextComponent(openGate.messages().get(
-                        locale, registration ? "dialog-register-button" : "dialog-login-button")),
-                new net.md_5.bungee.api.dialog.action.StaticAction(new net.md_5.bungee.api.chat.ClickEvent(
-                        net.md_5.bungee.api.chat.ClickEvent.Action.SUGGEST_COMMAND, command)));
+        var label = new net.md_5.bungee.api.chat.TextComponent(openGate.messages().get(
+                locale, registration ? "dialog-register-button" : "dialog-login-button"));
         try {
-            player.showDialog(new net.md_5.bungee.api.dialog.NoticeDialog(
-                    new net.md_5.bungee.api.dialog.DialogBase(title), button));
-        } catch (IllegalStateException | UnsupportedOperationException ignored) {
+            var actionType = Class.forName("net.md_5.bungee.api.dialog.action.Action");
+            var staticActionType = Class.forName("net.md_5.bungee.api.dialog.action.StaticAction");
+            var buttonType = Class.forName("net.md_5.bungee.api.dialog.action.ActionButton");
+            var baseType = Class.forName("net.md_5.bungee.api.dialog.DialogBase");
+            var dialogType = Class.forName("net.md_5.bungee.api.dialog.Dialog");
+            var noticeType = Class.forName("net.md_5.bungee.api.dialog.NoticeDialog");
+            var click = new net.md_5.bungee.api.chat.ClickEvent(
+                    net.md_5.bungee.api.chat.ClickEvent.Action.SUGGEST_COMMAND, command);
+            var action = staticActionType.getConstructor(net.md_5.bungee.api.chat.ClickEvent.class)
+                    .newInstance(click);
+            var button = buttonType.getConstructor(net.md_5.bungee.api.chat.BaseComponent.class, actionType)
+                    .newInstance(label, action);
+            var base = baseType.getConstructor(net.md_5.bungee.api.chat.BaseComponent.class).newInstance(title);
+            var notice = noticeType.getConstructor(baseType, buttonType).newInstance(base, button);
+            player.getClass().getMethod("showDialog", dialogType).invoke(player, notice);
+        } catch (ReflectiveOperationException | LinkageError | IllegalStateException
+                | UnsupportedOperationException ignored) {
         }
     }
 }

@@ -12,6 +12,32 @@ import org.junit.jupiter.api.Test;
 
 class SessionRegistryTest {
     @Test
+    void releasingASecondSessionInvalidatesThePreviousConnection() {
+        var registry = new SessionRegistry(Clock.systemUTC());
+        var accountId = UUID.randomUUID();
+        var firstId = UUID.randomUUID();
+        var secondId = UUID.randomUUID();
+        var invalidated = new java.util.ArrayList<UUID>();
+        registry.onInvalidated(invalidated::add);
+
+        var first = authenticated(registry, firstId, accountId);
+        first.release();
+        var second = authenticated(registry, secondId, accountId);
+        second.release();
+
+        assertTrue(registry.find(firstId).isEmpty());
+        assertTrue(registry.find(secondId).isPresent());
+        assertEquals(java.util.List.of(firstId), invalidated);
+    }
+
+    private static AuthenticationSession authenticated(
+            SessionRegistry registry, UUID connectionId, UUID accountId) {
+        var session = registry.open(connectionId);
+        session.resolve(new ResolvedIdentity(
+                "Player", accountId, IdentityType.PREMIUM, true, false, false));
+        return session;
+    }
+    @Test
     void bulkInvalidationClosesAllSessionsEvenIfOneDisconnectCallbackFails() {
         var registry = new SessionRegistry(Clock.systemUTC());
         var first = registry.open(UUID.randomUUID());

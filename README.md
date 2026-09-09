@@ -160,7 +160,7 @@ OpenGate rate-limits failed logins and registrations. IP addresses are never acc
 
 SQLite is a normal database file, so protect the whole `plugins/OpenGate/` directory and keep backups of both `opengate.db` and `secret.key`. Proxy backends should never be exposed directly to the internet.
 
-Modern clients can optionally resume authenticated sessions using cookies. Logout, password changes, account deletion, and session revocation invalidate them.
+Modern clients can optionally resume authenticated sessions using cookies. Logout, password changes, account deletion, and session revocation invalidate them. If the same account authenticates again, its previous connection is closed.
 
 ## Integrations
 

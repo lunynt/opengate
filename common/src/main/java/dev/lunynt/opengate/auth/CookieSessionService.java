@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 
 public final class CookieSessionService implements AutoCloseable {
     public static final int TOKEN_BYTES = 32;
@@ -21,14 +22,30 @@ public final class CookieSessionService implements AutoCloseable {
     private final Duration lifetime;
     private final boolean enabled;
     private final java.security.SecureRandom random = new java.security.SecureRandom();
-    private final ExecutorService executor = java.util.concurrent.Executors.newThreadPerTaskExecutor(
-            Thread.ofVirtual().name("opengate-cookie-", 0).factory());
+    private final ExecutorService executor;
 
     public CookieSessionService(OpenGateDataSource dataSource, Clock clock, Duration lifetime, boolean enabled) {
+        this(dataSource, clock, lifetime, enabled, new java.util.concurrent.ThreadPoolExecutor(
+                2,
+                2,
+                0L,
+                java.util.concurrent.TimeUnit.MILLISECONDS,
+                new java.util.concurrent.ArrayBlockingQueue<>(64),
+                Thread.ofPlatform().daemon().name("opengate-cookie-", 0).factory(),
+                new java.util.concurrent.ThreadPoolExecutor.AbortPolicy()));
+    }
+
+    CookieSessionService(
+            OpenGateDataSource dataSource,
+            Clock clock,
+            Duration lifetime,
+            boolean enabled,
+            ExecutorService executor) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.lifetime = Objects.requireNonNull(lifetime, "lifetime");
         this.enabled = enabled;
+        this.executor = Objects.requireNonNull(executor, "executor");
         if (lifetime.isZero() || lifetime.isNegative() || lifetime.compareTo(Duration.ofDays(30)) > 0) {
             throw new IllegalArgumentException("cookie session lifetime must be between 1 millisecond and 30 days");
         }
@@ -36,7 +53,11 @@ public final class CookieSessionService implements AutoCloseable {
 
     public CompletableFuture<Optional<byte[]>> issue(UUID playerId) {
         if (!enabled) return CompletableFuture.completedFuture(Optional.empty());
-        return CompletableFuture.supplyAsync(() -> Optional.of(issueBlocking(playerId)), executor);
+        try {
+            return CompletableFuture.supplyAsync(() -> Optional.of(issueBlocking(playerId)), executor);
+        } catch (RejectedExecutionException exception) {
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
     }
 
     public CompletableFuture<Boolean> verify(UUID playerId, byte[] token) {
@@ -44,26 +65,35 @@ public final class CookieSessionService implements AutoCloseable {
             return CompletableFuture.completedFuture(false);
         }
         var owned = token.clone();
-        return CompletableFuture.supplyAsync(() -> verifyBlocking(playerId, owned), executor)
-                .whenComplete((result, error) -> java.util.Arrays.fill(owned, (byte) 0));
+        try {
+            return CompletableFuture.supplyAsync(() -> verifyBlocking(playerId, owned), executor)
+                    .whenComplete((result, error) -> java.util.Arrays.fill(owned, (byte) 0));
+        } catch (RejectedExecutionException exception) {
+            java.util.Arrays.fill(owned, (byte) 0);
+            return CompletableFuture.completedFuture(false);
+        }
     }
 
     public CompletableFuture<Void> revokeAll(UUID playerId) {
-        return CompletableFuture.runAsync(() -> {
-            try (var connection = dataSource.getConnection()) {
-                connection.setAutoCommit(false);
-                try {
-                    incrementSessionGeneration(connection, playerId);
-                    deleteAll(connection, playerId);
-                    connection.commit();
+        try {
+            return CompletableFuture.runAsync(() -> {
+                try (var connection = dataSource.getConnection()) {
+                    connection.setAutoCommit(false);
+                    try {
+                        incrementSessionGeneration(connection, playerId);
+                        deleteAll(connection, playerId);
+                        connection.commit();
+                    } catch (SQLException exception) {
+                        connection.rollback();
+                        throw exception;
+                    }
                 } catch (SQLException exception) {
-                    connection.rollback();
-                    throw exception;
+                    throw new IllegalStateException("could not revoke cookie sessions", exception);
                 }
-            } catch (SQLException exception) {
-                throw new IllegalStateException("could not revoke cookie sessions", exception);
-            }
-        }, executor);
+            }, executor);
+        } catch (RejectedExecutionException exception) {
+            return CompletableFuture.failedFuture(exception);
+        }
     }
 
     private byte[] issueBlocking(UUID playerId) {

@@ -2,6 +2,7 @@ package dev.lunynt.opengate.auth;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.lunynt.opengate.account.Account;
 import dev.lunynt.opengate.account.JdbcAccountRepository;
@@ -17,6 +18,25 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class CookieSessionServiceTest {
+    @Test
+    void overloadCannotCreateOrAcceptCookiesAndDoesNotHideRevocationFailure() {
+        var database = new DatabaseConfig(
+                DatabaseType.H2, "jdbc:h2:mem:cookie-overload;DB_CLOSE_DELAY=-1", "", "", 1,
+                Duration.ofSeconds(5));
+        try (var dataSource = new OpenGateDataSource(database)) {
+            DatabaseSchema.migrate(dataSource);
+            var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+            executor.shutdownNow();
+            try (var sessions = new CookieSessionService(
+                    dataSource, Clock.systemUTC(), Duration.ofHours(1), true, executor)) {
+                assertTrue(sessions.issue(UUID.randomUUID()).join().isEmpty());
+                assertFalse(sessions.verify(UUID.randomUUID(), new byte[CookieSessionService.TOKEN_BYTES]).join());
+                assertThrows(java.util.concurrent.CompletionException.class,
+                        () -> sessions.revokeAll(UUID.randomUUID()).join());
+            }
+        }
+    }
+
     @Test
     void issuesAccountBoundRevocableOpaqueTokens() throws Exception {
         var database = new DatabaseConfig(

@@ -4,7 +4,7 @@ plugins {
 
 dependencies {
     implementation(project(":common"))
-    compileOnly("net.md-5:bungeecord-api:1.21-R0.5-SNAPSHOT")
+    compileOnly("net.md-5:bungeecord-api:1.21-R0.5-20260321.003003-54")
 }
 
 base {

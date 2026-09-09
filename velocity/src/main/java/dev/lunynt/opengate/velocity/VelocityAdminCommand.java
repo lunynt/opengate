@@ -35,6 +35,7 @@ final class VelocityAdminCommand implements SimpleCommand {
                 case "lookup" -> lookup(invocation.source(), arguments[1], actor);
                 case "audit" -> audit(invocation.source(), arguments, actor);
                 case "revoke" -> revoke(invocation.source(), arguments[1], actor);
+                case "recover" -> recover(invocation.source(), arguments, actor);
                 default -> usage(invocation.source());
             }
         }).schedule();
@@ -43,9 +44,44 @@ final class VelocityAdminCommand implements SimpleCommand {
     @Override
     public List<String> suggest(Invocation invocation) {
         if (invocation.arguments().length <= 1) {
-            return List.of("lookup", "audit", "revoke");
+            return List.of("lookup", "audit", "revoke", "recover");
         }
         return List.of();
+    }
+
+    private void recover(CommandSource source, String[] arguments, String actor) {
+        if (!source.hasPermission("opengate.admin.recover")) {
+            source.sendMessage(message(source, "admin-no-permission"));
+            return;
+        }
+        if (arguments.length != 3) {
+            usage(source);
+            return;
+        }
+        var target = plugin.server().getPlayer(arguments[1]).orElse(null);
+        if (target != null
+                && plugin.openGate().config().protectedAccounts().protects(target::hasPermission)
+                && !source.hasPermission("opengate.admin.recover.protected")) {
+            source.sendMessage(message(source, "protected-account"));
+            return;
+        }
+        var password = arguments[2].toCharArray();
+        try {
+            var account = plugin.openGate().admin().recover(arguments[1], password, actor);
+            if (account.isEmpty()) {
+                source.sendMessage(message(source, "admin-account-not-found"));
+                return;
+            }
+            source.sendMessage(message(source, "admin-recovered")
+                    .append(Component.text(account.orElseThrow().username() + ".")));
+        } catch (IllegalArgumentException exception) {
+            source.sendMessage(message(source, exception.getMessage().startsWith("only offline")
+                    ? "admin-recovery-offline-only" : "password-policy-invalid"));
+        } catch (RuntimeException exception) {
+            source.sendMessage(message(source, "admin-request-failed"));
+        } finally {
+            java.util.Arrays.fill(password, '\0');
+        }
     }
 
     private void lookup(CommandSource source, String username, String actor) {

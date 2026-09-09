@@ -77,6 +77,30 @@ public final class AdminService {
         return account.map(AdminService::summary);
     }
 
+    public Optional<AccountSummary> recover(String username, char[] newPassword, String actor) {
+        var account = accounts.find(username);
+        if (account.isEmpty()) return Optional.empty();
+        var value = account.orElseThrow();
+        if (value.identityType() != dev.lunynt.opengate.auth.IdentityType.OFFLINE) {
+            throw new IllegalArgumentException("only offline accounts can use password recovery");
+        }
+        if (!accounts.resetPassword(value.playerId(), newPassword).join()) return Optional.empty();
+        auditLog.record(
+                AuditEventType.ADMIN_PASSWORD_RECOVERED,
+                value.playerId(),
+                value.username(),
+                null,
+                actorDetail(actor));
+        var local = java.util.concurrent.CompletableFuture.completedFuture(null)
+                .thenRun(() -> sessions.closeByAccountId(value.playerId()));
+        var cookies = java.util.concurrent.CompletableFuture.completedFuture(null)
+                .thenCompose(ignored -> cookieRevoker.apply(value.playerId()));
+        var remote = java.util.concurrent.CompletableFuture.completedFuture(null)
+                .thenCompose(ignored -> cluster.revoked(value.playerId()));
+        java.util.concurrent.CompletableFuture.allOf(local, cookies, remote).join();
+        return Optional.of(summary(accounts.find(value.playerId()).orElseThrow()));
+    }
+
     private static AccountSummary summary(dev.lunynt.opengate.account.Account account) {
         return new AccountSummary(
                 account.playerId(),

@@ -187,6 +187,21 @@ public final class AccountService implements AutoCloseable {
                 AuditEventType.IDENTITY_CHANGED);
     }
 
+    public CompletableFuture<Boolean> resetPassword(UUID playerId, char[] newPassword) {
+        validatePassword(newPassword);
+        var ownedPassword = Arrays.copyOf(newPassword, newPassword.length);
+        return submit("admin-recovery:" + playerId, () -> {
+            try {
+                var account = accounts.findByPlayerId(playerId);
+                if (account.isEmpty()) return false;
+                accounts.updatePassword(playerId, passwords.hash(ownedPassword));
+                return true;
+            } finally {
+                Arrays.fill(ownedPassword, '\0');
+            }
+        });
+    }
+
     private CompletableFuture<AccountActionResult> authenticatedAction(
             UUID playerId,
             char[] currentPassword,

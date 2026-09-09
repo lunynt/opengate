@@ -64,7 +64,7 @@ public final class OpenGateMessages {
             dialog-login-button: 'ᴇɴᴛᴇʀ ʟᴏɢɪɴ ᴄᴏᴍᴍᴀɴᴅ'
             queue-unavailable: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴛʜᴇ ꜱᴇʀᴠᴇʀ Qᴜᴇᴜᴇ ɪꜱ ᴜɴᴀᴠᴀɪʟᴀʙʟᴇ'
             admin-no-permission: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ɴᴏ ᴘᴇʀᴍɪꜱꜱɪᴏɴ'
-            admin-usage: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴜꜱᴀɢᴇ &8• &f/opengate lookup <player> | audit <player> [limit] | revoke <player>'
+            admin-usage: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴜꜱᴀɢᴇ &8• &f/opengate lookup <player> | audit <player> [limit] | revoke <player> | recover <player> <new-password>'
             admin-request-failed: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ʀᴇqᴜᴇꜱᴛ ꜰᴀɪʟᴇᴅ'
             admin-account-not-found: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴀᴄᴄᴏᴜɴᴛ ɴᴏᴛ ꜰᴏᴜɴᴅ'
             admin-account-header: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ᴀᴄᴄᴏᴜɴᴛ &8• &f'
@@ -78,6 +78,8 @@ public final class OpenGateMessages {
             admin-audit-header: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &7ʀᴇᴄᴇɴᴛ ᴇᴠᴇɴᴛꜱ &8• &f'
             admin-revocation-failed: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ꜱᴏᴍᴇ ꜱᴇꜱꜱɪᴏɴꜱ ᴄᴏᴜʟᴅ ɴᴏᴛ ʙᴇ ᴄʟᴏꜱᴇᴅ'
             admin-revoked: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ʀᴇᴠᴏᴋᴇᴅ ꜱᴇꜱꜱɪᴏɴꜱ ꜰᴏʀ &f'
+            admin-recovered: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &a✓ &7ʀᴇꜱᴇᴛ ᴘᴀꜱꜱᴡᴏʀᴅ ᴀɴᴅ ʀᴇᴠᴏᴋᴇᴅ ꜱᴇꜱꜱɪᴏɴꜱ ꜰᴏʀ &f'
+            admin-recovery-offline-only: '&8[&fᴏᴘᴇɴɢᴀᴛᴇ&8] &c✕ &7ᴘᴀꜱꜱᴡᴏʀᴅ ʀᴇᴄᴏᴠᴇʀʏ ɪꜱ ᴏɴʟʏ ꜰᴏʀ ᴏꜰꜰʟɪɴᴇ ᴀᴄᴄᴏᴜɴᴛꜱ'
             """;
 
     private final Map<String, String> messages;

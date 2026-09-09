@@ -36,7 +36,7 @@ class IdentityResolverTest {
     void explicitPremiumModeLetsUnknownNamesRegisterOffline() {
         var profile = new PremiumProfile(UUID.randomUUID(), "Pipis");
         var resolver = new IdentityResolver(
-                accounts, ignored -> ProfileLookupResult.found(profile), true, false, ignored -> true);
+                accounts, ignored -> ProfileLookupResult.found(profile), true, false, false, ignored -> true);
 
         assertEquals(IdentityDecision.OFFLINE, resolver.resolve("pipis"));
     }
@@ -45,9 +45,19 @@ class IdentityResolverTest {
     void registeredPremiumAccountStillRequiresOnlineAuthentication() {
         accounts.save(account("Player", IdentityType.PREMIUM));
         var resolver = new IdentityResolver(
-                accounts, ignored -> ProfileLookupResult.unavailable(), true, false, ignored -> true);
+                accounts, ignored -> ProfileLookupResult.unavailable(), true, false, true, ignored -> true);
 
         assertEquals(IdentityDecision.ONLINE, resolver.resolve("Player"));
+    }
+
+    @Test
+    void premiumReservationProtectsAnUnregisteredName() {
+        var profile = new PremiumProfile(UUID.randomUUID(), "Player");
+        var resolver = new IdentityResolver(
+                accounts, ignored -> ProfileLookupResult.found(profile), true, false, true, ignored -> true);
+
+        assertEquals(IdentityDecision.ONLINE, resolver.resolve("Player"));
+        assertEquals(IdentityDecision.DENY_CASE_MISMATCH, resolver.resolve("player"));
     }
 
     @Test

@@ -178,6 +178,7 @@ final class YamlConfiguration {
         add(keys, "authentication.password.maximum-length", "maximum-password-length");
         add(keys, "authentication.premium-lookup.enabled", "premium-lookup-enabled");
         add(keys, "authentication.premium-lookup.auto-detect", "premium-auto-detect");
+        add(keys, "authentication.premium-lookup.reserve-names", "premium-reserve-names");
         add(keys, "authentication.premium-lookup.timeout-millis", "premium-lookup-timeout-millis");
         add(keys, "authentication.require-login-permissions", "require-login-permissions");
         add(keys, "authentication.require-2fa-permissions", "require-2fa-permissions");

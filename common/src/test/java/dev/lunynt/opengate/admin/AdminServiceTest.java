@@ -49,8 +49,12 @@ class AdminServiceTest {
             assertTrue(admin.lookup("player", "console").isPresent());
             assertTrue(admin.revoke("Player", "console").isPresent());
 
+            assertTrue(admin.recover("Player", "replacement password".toCharArray(), "console").isPresent());
+            assertEquals("replacement password", repository.account.passwordHash());
+
             assertEquals(AuditEventType.ADMIN_ACCOUNT_LOOKUP, audit.types.get(0));
             assertEquals(AuditEventType.ADMIN_SESSION_REVOKED, audit.types.get(1));
+            assertEquals(AuditEventType.ADMIN_PASSWORD_RECOVERED, audit.types.get(2));
             var published = new java.util.concurrent.atomic.AtomicBoolean();
             var cluster = new dev.lunynt.opengate.cluster.ClusterCoordinator() {
                 @Override public java.util.concurrent.CompletionStage<Void> authenticated(UUID id) {
@@ -67,7 +71,7 @@ class AdminServiceTest {
             assertThrows(java.util.concurrent.CompletionException.class,
                     () -> failingAdmin.revoke("Player", "console"));
             assertTrue(published.get());
-            assertEquals(2, audit.types.size(), "failed revocation must not be audited as successful");
+            assertEquals(3, audit.types.size(), "failed revocation must not be audited as successful");
         }
     }
 
@@ -122,7 +126,7 @@ class AdminServiceTest {
     private static final class UnusedHasher implements PasswordHasher {
         @Override
         public String hash(char[] password) {
-            throw new UnsupportedOperationException();
+            return new String(password);
         }
 
         @Override

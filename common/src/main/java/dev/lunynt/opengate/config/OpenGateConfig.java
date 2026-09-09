@@ -23,6 +23,7 @@ public record OpenGateConfig(
         int maximumPasswordLength,
         boolean premiumLookupEnabled,
         boolean premiumAutoDetect,
+        boolean reservePremiumNames,
         Duration premiumLookupTimeout,
         String limboServer,
         List<String> lobbyServers,
@@ -60,6 +61,8 @@ public record OpenGateConfig(
                 enabled: true
                 # Automatically select premium mode for new names. Leave this off to require /premium.
                 auto-detect: false
+                # Stop new offline accounts from claiming names owned by Microsoft profiles.
+                reserve-names: true
                 timeout-millis: 3000
               # Players with these permissions must use a password or 2FA.
               require-login-permissions: []
@@ -201,6 +204,7 @@ public record OpenGateConfig(
                 integer(properties, "maximum-password-length"),
                 bool(properties, "premium-lookup-enabled"),
                 bool(properties, "premium-auto-detect", false),
+                bool(properties, "premium-reserve-names", true),
                 Duration.ofMillis(integer(properties, "premium-lookup-timeout-millis")),
                 compatible(properties, "proxy-auth-server", "velocity-limbo-server", "limbo"),
                 compatible(properties, "proxy-lobby-servers", "velocity-lobby-servers", "lobby").lines()

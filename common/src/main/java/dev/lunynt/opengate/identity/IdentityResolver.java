@@ -12,11 +12,12 @@ public final class IdentityResolver {
     private final ProfileLookup profiles;
     private final boolean premiumLookupEnabled;
     private final boolean premiumAutoDetect;
+    private final boolean reservePremiumNames;
     private final java.util.function.Predicate<String> offlineWhitelist;
 
     public IdentityResolver(
             AccountRepository accounts, ProfileLookup profiles, boolean premiumLookupEnabled) {
-        this(accounts, profiles, premiumLookupEnabled, true, ignored -> true);
+        this(accounts, profiles, premiumLookupEnabled, true, true, ignored -> true);
     }
 
     public IdentityResolver(
@@ -24,7 +25,7 @@ public final class IdentityResolver {
             ProfileLookup profiles,
             boolean premiumLookupEnabled,
             java.util.function.Predicate<String> offlineWhitelist) {
-        this(accounts, profiles, premiumLookupEnabled, true, offlineWhitelist);
+        this(accounts, profiles, premiumLookupEnabled, true, true, offlineWhitelist);
     }
 
     public IdentityResolver(
@@ -32,11 +33,13 @@ public final class IdentityResolver {
             ProfileLookup profiles,
             boolean premiumLookupEnabled,
             boolean premiumAutoDetect,
+            boolean reservePremiumNames,
             java.util.function.Predicate<String> offlineWhitelist) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.premiumLookupEnabled = premiumLookupEnabled;
         this.premiumAutoDetect = premiumAutoDetect;
+        this.reservePremiumNames = reservePremiumNames;
         this.offlineWhitelist = Objects.requireNonNull(offlineWhitelist, "offlineWhitelist");
     }
 
@@ -57,7 +60,7 @@ public final class IdentityResolver {
                     : IdentityDecision.DENY_OFFLINE_NOT_WHITELISTED;
         }
 
-        if (!premiumLookupEnabled || !premiumAutoDetect) {
+        if (!premiumLookupEnabled || !premiumAutoDetect && !reservePremiumNames) {
             return offlineDecision(username);
         }
 

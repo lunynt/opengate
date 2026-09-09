@@ -36,3 +36,9 @@ permissions:
   opengate.admin:
     description: Allows OpenGate account administration
     default: op
+  opengate.admin.recover:
+    description: Allows password recovery for offline accounts
+    default: op
+  opengate.admin.recover.protected:
+    description: Allows recovery of protected online accounts
+    default: false

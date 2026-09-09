@@ -82,7 +82,10 @@ Admin commands require `opengate.admin`:
 /opengate lookup <player>
 /opengate audit <player> [limit]
 /opengate revoke <player>
+/opengate recover <player> <new-password>
 ```
+
+Password recovery only works for offline accounts and requires `opengate.admin.recover`. It replaces the password, logs the action, and revokes the player's active sessions and cookies. Recovering a protected player who is currently online also requires `opengate.admin.recover.protected`.
 
 ## Configuration
 
@@ -122,7 +125,7 @@ authentication:
   protected-account-permissions: [group.owner]
 ```
 
-New names use offline registration by default. After logging in, a Java player can run `/premium <password>` to enable Microsoft authentication for that account. OpenGate checks the Mojang profile and requires the exact profile name casing, then verifies ownership during the next connection. `/cracked <password>` switches back to password login. Set `authentication.premium-lookup.auto-detect: true` if you prefer automatic premium detection for new names.
+Names belonging to Microsoft profiles are reserved by default, so a new offline account can't claim them. Existing offline accounts are left alone. After logging in, a Java player can run `/premium <password>` to enable Microsoft authentication for that account. OpenGate checks the Mojang profile and requires the exact profile name casing, then verifies ownership during the next connection. `/cracked <password>` switches back to password login. Set `authentication.premium-lookup.reserve-names: false` if you accept the username-squatting risk, or enable `auto-detect` to select premium mode automatically.
 
 Add translation files such as `messages_lt.yml` or `messages_pt_BR.yml`. OpenGate uses the player's exact locale first, then the base language, then `messages.yml`.
 

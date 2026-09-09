@@ -26,9 +26,44 @@ final class BungeeAdminCommand extends Command {
                 case "lookup" -> lookup(sender, arguments[1], actor);
                 case "audit" -> audit(sender, arguments, actor);
                 case "revoke" -> revoke(sender, arguments[1], actor);
+                case "recover" -> recover(sender, arguments, actor);
                 default -> usage(sender);
             }
         });
+    }
+
+    private void recover(CommandSender sender, String[] arguments, String actor) {
+        if (!sender.hasPermission("opengate.admin.recover")) {
+            send(sender, "admin-no-permission");
+            return;
+        }
+        if (arguments.length != 3) {
+            usage(sender);
+            return;
+        }
+        var target = plugin.proxy().getPlayer(arguments[1]);
+        if (target != null
+                && plugin.openGate().config().protectedAccounts().protects(target::hasPermission)
+                && !sender.hasPermission("opengate.admin.recover.protected")) {
+            send(sender, "protected-account");
+            return;
+        }
+        var password = arguments[2].toCharArray();
+        try {
+            var account = plugin.openGate().admin().recover(arguments[1], password, actor);
+            if (account.isEmpty()) {
+                send(sender, "admin-account-not-found");
+                return;
+            }
+            sendValue(sender, "admin-recovered", account.orElseThrow().username() + ".");
+        } catch (IllegalArgumentException exception) {
+            send(sender, exception.getMessage().startsWith("only offline")
+                    ? "admin-recovery-offline-only" : "password-policy-invalid");
+        } catch (RuntimeException exception) {
+            send(sender, "admin-request-failed");
+        } finally {
+            java.util.Arrays.fill(password, '\0');
+        }
     }
 
     private void lookup(CommandSender sender, String username, String actor) {

@@ -2,6 +2,7 @@ package dev.lunynt.opengate.crypto;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
@@ -29,5 +30,13 @@ class SecretCipherTest {
         var cipher = new SecretCipher(current, master);
 
         assertEquals("secret", cipher.decrypt(legacy));
+    }
+
+    @Test
+    void rejectsMalformedCiphertextWithoutLeakingParserErrors() {
+        var cipher = new SecretCipher(new SecretKeySpec(new byte[32], "AES"));
+
+        assertThrows(IllegalArgumentException.class, () -> cipher.decrypt("enc:v2:broken"));
+        assertThrows(IllegalArgumentException.class, () -> cipher.decrypt("plaintext"));
     }
 }

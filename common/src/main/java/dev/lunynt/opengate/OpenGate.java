@@ -155,7 +155,9 @@ public final class OpenGate implements AutoCloseable {
                             new SecretCipher(
                                     SecretKeyDerivation.derive(secretKey, "totp-encryption", "AES"), secretKey),
                             clock,
-                            auditLog),
+                            auditLog,
+                            new LoginRateLimiter(config.maximumIpFailures(), config.ipFailureWindow(), clock),
+                            new LoginRateLimiter(config.maximumAccountFailures(), config.ipFailureWindow(), clock)),
                     auditLog,
                     new AdminService(
                             accounts,

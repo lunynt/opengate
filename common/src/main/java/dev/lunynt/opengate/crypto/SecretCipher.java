@@ -51,6 +51,9 @@ public final class SecretCipher {
     }
 
     public String decrypt(String encoded) {
+        if (encoded == null || encoded.length() > 4_096) {
+            throw new IllegalArgumentException("invalid encrypted secret");
+        }
         var legacy = encoded.startsWith(LEGACY_PREFIX);
         if (!legacy && !encoded.startsWith(PREFIX)) {
             throw new IllegalArgumentException("unsupported encrypted secret format");
@@ -58,6 +61,9 @@ public final class SecretCipher {
         try {
             var prefix = legacy ? LEGACY_PREFIX : PREFIX;
             var parts = encoded.substring(prefix.length()).split(":", 2);
+            if (parts.length != 2 || parts[0].isEmpty() || parts[1].isEmpty()) {
+                throw new IllegalArgumentException("invalid encrypted secret format");
+            }
             var decoder = Base64.getUrlDecoder();
             var nonce = decoder.decode(parts[0]);
             var ciphertext = decoder.decode(parts[1]);

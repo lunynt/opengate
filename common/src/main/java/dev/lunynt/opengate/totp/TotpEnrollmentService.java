@@ -2,6 +2,8 @@ package dev.lunynt.opengate.totp;
 
 import dev.lunynt.opengate.account.Account;
 import dev.lunynt.opengate.account.AccountRepository;
+import dev.lunynt.opengate.account.LoginRateLimiter;
+import dev.lunynt.opengate.account.NetworkAddress;
 import dev.lunynt.opengate.crypto.SecretCipher;
 import dev.lunynt.opengate.audit.AuditEventType;
 import dev.lunynt.opengate.audit.AuditLog;
@@ -21,6 +23,8 @@ public final class TotpEnrollmentService {
     private final SecretCipher secrets;
     private final Clock clock;
     private final AuditLog auditLog;
+    private final LoginRateLimiter ipRateLimiter;
+    private final LoginRateLimiter accountRateLimiter;
     private final ConcurrentHashMap<UUID, PendingEnrollment> pending = new ConcurrentHashMap<>();
 
     public TotpEnrollmentService(
@@ -29,11 +33,26 @@ public final class TotpEnrollmentService {
             SecretCipher secrets,
             Clock clock,
             AuditLog auditLog) {
+        this(accounts, totp, secrets, clock, auditLog,
+                new LoginRateLimiter(10, Duration.ofMinutes(10), clock),
+                new LoginRateLimiter(10, Duration.ofMinutes(10), clock));
+    }
+
+    public TotpEnrollmentService(
+            AccountRepository accounts,
+            TotpService totp,
+            SecretCipher secrets,
+            Clock clock,
+            AuditLog auditLog,
+            LoginRateLimiter ipRateLimiter,
+            LoginRateLimiter accountRateLimiter) {
         this.accounts = accounts;
         this.totp = totp;
         this.secrets = secrets;
         this.clock = clock;
         this.auditLog = auditLog;
+        this.ipRateLimiter = ipRateLimiter;
+        this.accountRateLimiter = accountRateLimiter;
     }
 
     public synchronized String begin(Account account) {
@@ -46,7 +65,7 @@ public final class TotpEnrollmentService {
         return totp.provisioningUri("OpenGate", account.username(), secret);
     }
 
-    public boolean confirm(UUID playerId, String code) {
+    public synchronized boolean confirm(UUID playerId, String code) {
         var enrollment = pending.get(playerId);
         if (enrollment == null || !enrollment.expiresAt().isAfter(clock.instant())) {
             pending.remove(playerId);
@@ -57,7 +76,9 @@ public final class TotpEnrollmentService {
         }
         var account = accounts.findByPlayerId(playerId).orElseThrow();
         accounts.updateTotpSecret(playerId, secrets.encrypt(enrollment.secret()));
-        accounts.claimTotpStep(playerId, totp.matchingStep(enrollment.secret(), code).orElseThrow());
+        if (!accounts.claimTotpStep(playerId, totp.matchingStep(enrollment.secret(), code).orElseThrow())) {
+            return false;
+        }
         auditLog.record(AuditEventType.TOTP_ENABLED, playerId, account.username(), null, null);
         pending.remove(playerId);
         return true;
@@ -66,16 +87,36 @@ public final class TotpEnrollmentService {
     public boolean verify(Account account, String code, String address) {
         var encrypted = account.totpSecret();
         if (encrypted == null) return false;
-        var secret = secrets.decrypt(encrypted);
-        var step = totp.matchingStep(secret, code);
-        var verified = step.isPresent() && accounts.claimTotpStep(account.playerId(), step.orElseThrow());
-        if (verified && secrets.isLegacy(encrypted)) {
-            accounts.updateTotpSecret(account.playerId(), secrets.encrypt(secret));
+        var addressKey = NetworkAddress.rateLimitKey(address);
+        var accountKey = account.playerId().toString();
+        if (ipRateLimiter.isBlocked(addressKey) || accountRateLimiter.isBlocked(accountKey)) {
+            auditFailure(account, address);
+            return false;
+        }
+        boolean verified = false;
+        try {
+            var secret = secrets.decrypt(encrypted);
+            var step = totp.matchingStep(secret, code);
+            verified = step.isPresent() && accounts.claimTotpStep(account.playerId(), step.orElseThrow());
+            if (verified && secrets.isLegacy(encrypted)) {
+                accounts.updateTotpSecret(account.playerId(), secrets.encrypt(secret));
+            }
+        } catch (IllegalArgumentException exception) {
+            verified = false;
         }
         if (!verified) {
-            auditLog.record(AuditEventType.TOTP_FAILURE, account.playerId(), account.username(), address, null);
+            ipRateLimiter.recordFailure(addressKey);
+            accountRateLimiter.recordFailure(accountKey);
+            auditFailure(account, address);
+        } else {
+            ipRateLimiter.clear(addressKey);
+            accountRateLimiter.clear(accountKey);
         }
         return verified;
+    }
+
+    private void auditFailure(Account account, String address) {
+        auditLog.record(AuditEventType.TOTP_FAILURE, account.playerId(), account.username(), address, null);
     }
 
     public void disable(Account account) {

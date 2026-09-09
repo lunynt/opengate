@@ -5,11 +5,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.lunynt.opengate.account.Account;
 import dev.lunynt.opengate.account.AccountRepository;
+import dev.lunynt.opengate.account.LoginRateLimiter;
 import dev.lunynt.opengate.auth.IdentityType;
 import dev.lunynt.opengate.crypto.SecretCipher;
 import dev.lunynt.opengate.audit.AuditLog;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,6 +44,32 @@ class TotpEnrollmentServiceTest {
         assertFalse(repository.account.totpSecret().contains(secret));
         assertTrue(cipher.decrypt(repository.account.totpSecret()).startsWith("sha256:"));
         assertFalse(service.verify(repository.account, code, "127.0.0.1"));
+    }
+
+    @Test
+    void limitsTotpAttemptsAcrossConnectionsAndRejectsCorruptSecrets() {
+        var clock = Clock.fixed(Instant.ofEpochSecond(59), ZoneOffset.UTC);
+        var totp = new TotpService(clock);
+        var cipher = new SecretCipher(new SecretKeySpec(new byte[32], "AES"));
+        var secret = totp.createSecret();
+        var account = new Account(
+                UUID.randomUUID(), "Player", IdentityType.OFFLINE, "hash", cipher.encrypt(secret), Instant.EPOCH);
+        var repository = new MemoryRepository(account);
+        var service = new TotpEnrollmentService(
+                repository,
+                totp,
+                cipher,
+                clock,
+                AuditLog.noop(),
+                new LoginRateLimiter(1, Duration.ofMinutes(10), clock),
+                new LoginRateLimiter(1, Duration.ofMinutes(10), clock));
+
+        assertFalse(service.verify(account, "000000", "127.0.0.1"));
+        assertFalse(service.verify(account, totp.generate(secret, 1), "127.0.0.1"));
+
+        var corrupt = new Account(
+                UUID.randomUUID(), "Broken", IdentityType.OFFLINE, "hash", "enc:v2:broken", Instant.EPOCH);
+        assertFalse(service.verify(corrupt, "123456", "127.0.0.2"));
     }
 
     private static final class MemoryRepository implements AccountRepository {

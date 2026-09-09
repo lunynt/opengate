@@ -156,7 +156,7 @@ Passwords are hashed with Argon2id, and old supported hashes are upgraded after 
 
 TOTP secrets are encrypted with AES-256-GCM. Back up `secret.key` together with your database. Losing that key means enrolled TOTP secrets can't be recovered.
 
-OpenGate rate-limits failed logins and registrations. IP addresses are never accepted as proof of identity, and audit logs store keyed fingerprints instead of raw addresses. If authentication can't be verified safely, the connection is rejected.
+OpenGate rate-limits failed password, TOTP, and registration attempts across reconnects. IP addresses are never accepted as proof of identity, and audit logs store keyed fingerprints instead of raw addresses. If authentication can't be verified safely, the connection is rejected.
 
 SQLite is a normal database file, so protect the whole `plugins/OpenGate/` directory and keep backups of both `opengate.db` and `secret.key`. Proxy backends should never be exposed directly to the internet.
 

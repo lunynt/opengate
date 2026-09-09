@@ -48,30 +48,12 @@ public final class JdbcAccountRepository implements AccountRepository {
 
     @Override
     public void save(Account account) {
-        var sql = switch (databaseType) {
-            case MYSQL, MARIADB -> """
-                INSERT INTO accounts (player_id, username, normalized_username, identity_type, password_hash,
-                    totp_secret, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE username=VALUES(username), normalized_username=VALUES(normalized_username),
-                    identity_type=VALUES(identity_type), password_hash=VALUES(password_hash), totp_secret=VALUES(totp_secret)
-                """;
-            case H2 -> """
-                MERGE INTO accounts (player_id, username, normalized_username, identity_type, password_hash,
-                    totp_secret, created_at) KEY(player_id) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """;
-            default -> """
+        var sql = """
                 INSERT INTO accounts (
                     player_id, username, normalized_username, identity_type, password_hash,
                     totp_secret, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(player_id) DO UPDATE SET
-                    username = excluded.username,
-                    normalized_username = excluded.normalized_username,
-                    identity_type = excluded.identity_type,
-                    password_hash = excluded.password_hash,
-                    totp_secret = excluded.totp_secret
                 """;
-        };
         try (var connection = dataSource.getConnection(); var statement = connection.prepareStatement(sql)) {
             statement.setString(1, account.playerId().toString());
             statement.setString(2, account.username());

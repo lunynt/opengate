@@ -47,6 +47,26 @@ class JdbcAccountRepositoryTest {
     }
 
     @Test
+    void neverOverwritesAnExistingPlayerAccount() {
+        try (var dataSource = dataSource("player-conflict.db")) {
+            var repository = new JdbcAccountRepository(dataSource);
+            var playerId = UUID.randomUUID();
+            var original = account(playerId, "PlayerOne");
+            var replacement = new Account(
+                    playerId,
+                    "PlayerOne",
+                    IdentityType.PREMIUM,
+                    "replacement-hash",
+                    "replacement-totp",
+                    Instant.now());
+            repository.save(original);
+
+            assertThrows(AccountAlreadyExistsException.class, () -> repository.save(replacement));
+            assertEquals(original, repository.findByPlayerId(playerId).orElseThrow());
+        }
+    }
+
+    @Test
     void claimsEachTotpStepOnce() {
         try (var dataSource = dataSource("totp.db")) {
             var repository = new JdbcAccountRepository(dataSource);

@@ -2,10 +2,12 @@ package dev.lunynt.opengate.database;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import dev.lunynt.opengate.account.Account;
+import dev.lunynt.opengate.account.AccountAlreadyExistsException;
 import dev.lunynt.opengate.account.JdbcAccountRepository;
 import dev.lunynt.opengate.auth.CookieSessionService;
 import dev.lunynt.opengate.auth.IdentityType;
@@ -54,6 +56,10 @@ class ExternalDatabaseIntegrationTest {
                     "initial-hash", null, Instant.EPOCH);
             accounts.save(account);
             assertEquals(account, accounts.findByUsername(username.toLowerCase(java.util.Locale.ROOT)).orElseThrow());
+            var replacement = new Account(account.playerId(), username, IdentityType.PREMIUM,
+                    "replacement-hash", null, Instant.now());
+            assertThrows(AccountAlreadyExistsException.class, () -> accounts.save(replacement));
+            assertEquals(account, accounts.findByPlayerId(account.playerId()).orElseThrow());
             assertTrue(accounts.claimTotpStep(account.playerId(), 10));
             assertFalse(accounts.claimTotpStep(account.playerId(), 10));
             assertTrue(accounts.claimTotpStep(account.playerId(), 11));

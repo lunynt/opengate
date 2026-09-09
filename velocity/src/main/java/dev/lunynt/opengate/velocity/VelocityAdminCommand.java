@@ -59,8 +59,12 @@ final class VelocityAdminCommand implements SimpleCommand {
             return;
         }
         var target = plugin.server().getPlayer(arguments[1]).orElse(null);
-        if (target != null
-                && plugin.openGate().config().protectedAccounts().protects(target::hasPermission)
+        var protectedAccount = plugin.openGate().accounts().find(arguments[1])
+                .map(account -> plugin.openGate().config().protectedAccounts()
+                        .protects(account.username(), account.playerId()))
+                .orElse(false);
+        if ((protectedAccount || target != null
+                && plugin.openGate().config().protectedAccounts().protects(target::hasPermission))
                 && !source.hasPermission("opengate.admin.recover.protected")) {
             source.sendMessage(message(source, "protected-account"));
             return;

@@ -433,7 +433,8 @@ final class PaperAuthenticationCommand implements CommandExecutor {
     }
 
     private boolean isProtected(Player player) {
-        return plugin.openGate().config().protectedAccounts().protects(player::hasPermission);
+        return plugin.openGate().config().protectedAccounts().protects(player::hasPermission)
+                || plugin.openGate().config().protectedAccounts().protects(player.getName(), accountId(player));
     }
 
     private String message(Player player, String key) {

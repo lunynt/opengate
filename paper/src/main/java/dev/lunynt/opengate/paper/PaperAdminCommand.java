@@ -38,8 +38,12 @@ final class PaperAdminCommand implements CommandExecutor {
                 return true;
             }
             var target = getTarget(arguments[1]);
-            if (target != null
-                    && plugin.openGate().config().protectedAccounts().protects(target::hasPermission)
+            var protectedAccount = plugin.openGate().accounts().find(arguments[1])
+                    .map(account -> plugin.openGate().config().protectedAccounts()
+                            .protects(account.username(), account.playerId()))
+                    .orElse(false);
+            if ((protectedAccount || target != null
+                    && plugin.openGate().config().protectedAccounts().protects(target::hasPermission))
                     && !sender.hasPermission("opengate.admin.recover.protected")) {
                 sender.sendMessage(message(sender, "protected-account"));
                 return true;

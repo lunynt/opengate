@@ -183,6 +183,7 @@ final class YamlConfiguration {
         add(keys, "authentication.require-login-permissions", "require-login-permissions");
         add(keys, "authentication.require-2fa-permissions", "require-2fa-permissions");
         add(keys, "authentication.protected-account-permissions", "protected-account-permissions");
+        add(keys, "authentication.protected-account-players", "protected-account-players");
         add(keys, "proxy.auth-server", "proxy-auth-server");
         add(keys, "proxy.lobby-servers", "proxy-lobby-servers");
         add(keys, "database.type", "database-type");

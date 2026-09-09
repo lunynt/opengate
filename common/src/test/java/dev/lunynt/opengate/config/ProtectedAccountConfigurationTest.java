@@ -29,6 +29,17 @@ class ProtectedAccountConfigurationTest {
     }
 
     @Test
+    void protectsConfiguredOfflineAccountsByNameOrUuid() {
+        var playerId = java.util.UUID.randomUUID();
+        var configuration = new ProtectedAccountConfiguration(
+                List.of(), List.of("Owner", playerId.toString()));
+
+        assertTrue(configuration.protects("owner", java.util.UUID.randomUUID()));
+        assertTrue(configuration.protects("SomeoneElse", playerId));
+        assertFalse(configuration.protects("Member", java.util.UUID.randomUUID()));
+    }
+
+    @Test
     void rejectsUnsafePermissionNodes() {
         assertThrows(IllegalArgumentException.class,
                 () -> new ProtectedAccountConfiguration(List.of("permission with spaces")));

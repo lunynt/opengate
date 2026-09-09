@@ -69,6 +69,8 @@ public record OpenGateConfig(
               require-2fa-permissions: []
               # Accounts with these permissions cannot change or delete credentials.
               protected-account-permissions: []
+              # Usernames or OpenGate UUIDs that stay protected even while offline.
+              protected-account-players: []
 
             # Proxy routing. Server names must match Velocity or BungeeCord.
             proxy:

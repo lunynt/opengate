@@ -42,8 +42,12 @@ final class BungeeAdminCommand extends Command {
             return;
         }
         var target = plugin.proxy().getPlayer(arguments[1]);
-        if (target != null
-                && plugin.openGate().config().protectedAccounts().protects(target::hasPermission)
+        var protectedAccount = plugin.openGate().accounts().find(arguments[1])
+                .map(account -> plugin.openGate().config().protectedAccounts()
+                        .protects(account.username(), account.playerId()))
+                .orElse(false);
+        if ((protectedAccount || target != null
+                && plugin.openGate().config().protectedAccounts().protects(target::hasPermission))
                 && !sender.hasPermission("opengate.admin.recover.protected")) {
             send(sender, "protected-account");
             return;

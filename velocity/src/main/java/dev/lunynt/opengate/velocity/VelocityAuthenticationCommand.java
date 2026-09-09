@@ -403,7 +403,8 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
     }
 
     private boolean isProtected(Player player) {
-        return plugin.openGate().config().protectedAccounts().protects(player::hasPermission);
+        return plugin.openGate().config().protectedAccounts().protects(player::hasPermission)
+                || plugin.openGate().config().protectedAccounts().protects(player.getUsername(), accountId(player));
     }
 
     private Component message(Player player, String key) {

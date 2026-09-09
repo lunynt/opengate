@@ -410,7 +410,8 @@ final class BungeeAuthenticationCommand extends Command {
     }
 
     private boolean isProtected(ProxiedPlayer player) {
-        return plugin.openGate().config().protectedAccounts().protects(player::hasPermission);
+        return plugin.openGate().config().protectedAccounts().protects(player::hasPermission)
+                || plugin.openGate().config().protectedAccounts().protects(player.getName(), accountId(player));
     }
 
 }

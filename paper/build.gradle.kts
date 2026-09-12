@@ -2,12 +2,27 @@ plugins {
     id("com.gradleup.shadow")
 }
 
-val spigotApiVersion = providers.gradleProperty("spigotApiVersion").getOrElse("1.21-R0.1-SNAPSHOT")
+val oldestSpigotApiVersion = "1.21-R0.1-20240807.214924-87"
+val latestSpigotApiVersion = "26.2-R0.1-20260816.205300-12"
+val spigotApiVersion = providers.gradleProperty("spigotApiVersion").getOrElse(oldestSpigotApiVersion)
+
+val oldestSpigotApi = configurations.create("oldestSpigotApi") {
+    isCanBeConsumed = false
+}
+val latestSpigotApi = configurations.create("latestSpigotApi") {
+    isCanBeConsumed = false
+}
 
 dependencies {
     implementation(project(":common"))
     compileOnly("org.spigotmc:spigot-api:$spigotApiVersion")
     compileOnly("org.jetbrains:annotations-java5:24.1.0")
+    add(oldestSpigotApi.name, "org.spigotmc:spigot-api:$oldestSpigotApiVersion")
+    add(latestSpigotApi.name, "org.spigotmc:spigot-api:$latestSpigotApiVersion")
+}
+
+val verifySupportedSpigotApis = tasks.register("verifySupportedSpigotApis") {
+    inputs.files(oldestSpigotApi, latestSpigotApi)
 }
 
 base {
@@ -36,3 +51,4 @@ tasks.shadowJar {
 }
 
 tasks.assemble { dependsOn(tasks.shadowJar) }
+tasks.check { dependsOn(verifySupportedSpigotApis) }

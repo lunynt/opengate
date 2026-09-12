@@ -14,8 +14,8 @@ jobs:
     strategy:
       matrix:
         spigot-api:
-          - 1.21-R0.1-SNAPSHOT
-          - 26.2-R0.1-SNAPSHOT
+          - 1.21-R0.1-20240807.214924-87
+          - 26.2-R0.1-20260816.205300-12
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

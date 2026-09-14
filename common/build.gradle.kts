@@ -13,7 +13,7 @@ dependencies {
     implementation("com.h2database:h2:2.4.240")
     implementation("io.lettuce:lettuce-core:7.7.0.RELEASE")
     implementation("com.fasterxml.jackson.core:jackson-core:2.22.2")
-    implementation("org.yaml:snakeyaml:2.5")
+    implementation("org.yaml:snakeyaml:2.7")
     compileOnly("org.geysermc.floodgate:api:2.2.5-20260809.110940-20") {
         isTransitive = false
     }

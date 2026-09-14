@@ -3,7 +3,7 @@ plugins {
 }
 
 dependencies {
-    implementation(enforcedPlatform("io.netty:netty-bom:4.2.17.Final"))
+    implementation(enforcedPlatform("io.netty:netty-bom:4.2.18.Final"))
     implementation("org.bouncycastle:bcprov-jdk18on:1.84")
     implementation("com.zaxxer:HikariCP:7.1.0")
     implementation("org.xerial:sqlite-jdbc:3.53.4.0")

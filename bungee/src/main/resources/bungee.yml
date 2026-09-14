@@ -1,6 +1,6 @@
 name: OpenGate
 main: dev.lunynt.opengate.bungee.OpenGateBungeePlugin
-version: 0.1.0-SNAPSHOT
+version: 0.1.0
 author: lunynt
 description: Authentication gateway for BungeeCord
 softDepends: [floodgate, ajQueue]

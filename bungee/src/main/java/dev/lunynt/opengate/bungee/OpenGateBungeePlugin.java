@@ -15,6 +15,7 @@ public final class OpenGateBungeePlugin extends Plugin {
     static final String SESSION_COOKIE = "opengate:session";
     private OpenGate openGate;
     private FloodgateIdentity floodgate = FloodgateIdentity.unavailable();
+    private boolean floodgateEnabled;
     private dev.lunynt.opengate.integration.AjQueueIntegration ajQueue;
 
     @Override
@@ -38,6 +39,7 @@ public final class OpenGateBungeePlugin extends Plugin {
         if (getProxy().getPluginManager().getPlugin("floodgate") != null) {
             try {
                 floodgate = new FloodgateApiIdentity();
+                floodgateEnabled = true;
                 getLogger().info("Floodgate integration enabled");
             } catch (LinkageError | RuntimeException exception) {
                 getLogger().warning("Floodgate API unavailable; Bedrock authentication will fail closed");
@@ -54,7 +56,9 @@ public final class OpenGateBungeePlugin extends Plugin {
         plugins.registerCommand(this, authenticationCommand("cracked"));
         plugins.registerCommand(this, new BungeeAdminCommand(
                 this, openGate.config().commands().aliases("opengate").toArray(String[]::new)));
-        getLogger().info("OpenGate authentication engine enabled on BungeeCord");
+        dev.lunynt.opengate.StartupLog.lines(
+                "BungeeCord", getDescription().getVersion(), openGate.config(), floodgateEnabled, true)
+                .forEach(getLogger()::info);
     }
 
     private BungeeAuthenticationCommand authenticationCommand(String name) {

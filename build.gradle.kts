@@ -8,7 +8,7 @@ plugins {
 
 allprojects {
     group = "dev.lunynt.opengate"
-    version = "0.1.0-SNAPSHOT"
+    version = "0.1.0"
 
     repositories {
         mavenCentral()

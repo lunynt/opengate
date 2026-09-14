@@ -9,6 +9,7 @@ public final class OpenGatePaperPlugin extends JavaPlugin {
     private final org.bukkit.NamespacedKey sessionCookie = new org.bukkit.NamespacedKey(this, "session");
     private OpenGate openGate;
     private FloodgateIdentity floodgate = FloodgateIdentity.unavailable();
+    private boolean floodgateEnabled;
 
     @Override
     public void onEnable() {
@@ -27,6 +28,7 @@ public final class OpenGatePaperPlugin extends JavaPlugin {
         if (getServer().getPluginManager().isPluginEnabled("floodgate")) {
             try {
                 floodgate = new FloodgateApiIdentity();
+                floodgateEnabled = true;
                 getLogger().info("Floodgate integration enabled");
             } catch (LinkageError | RuntimeException exception) {
                 getLogger().warning("Floodgate API unavailable; Bedrock authentication will fail closed");
@@ -42,7 +44,9 @@ public final class OpenGatePaperPlugin extends JavaPlugin {
         configureCommand("premium", commands);
         configureCommand("cracked", commands);
         configureCommand("opengate", new PaperAdminCommand(this));
-        getLogger().info("OpenGate authentication engine enabled on Paper");
+        dev.lunynt.opengate.StartupLog.lines(
+                "Paper", getDescription().getVersion(), openGate.config(), floodgateEnabled, false)
+                .forEach(getLogger()::info);
     }
 
     private void configureCommand(String name, org.bukkit.command.CommandExecutor executor) {

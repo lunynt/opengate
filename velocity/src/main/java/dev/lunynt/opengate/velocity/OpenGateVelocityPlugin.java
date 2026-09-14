@@ -19,7 +19,7 @@ import org.slf4j.Logger;
 @Plugin(
         id = "opengate",
         name = "OpenGate",
-        version = "0.1.0-SNAPSHOT",
+        version = "0.1.0",
         description = "Authentication gateway for Paper and Velocity",
         dependencies = {
             @Dependency(id = "floodgate", optional = true),
@@ -32,6 +32,7 @@ public final class OpenGateVelocityPlugin {
     private final ProxyServer server;
     private OpenGate openGate;
     private FloodgateIdentity floodgate = FloodgateIdentity.unavailable();
+    private boolean floodgateEnabled;
     private dev.lunynt.opengate.integration.AjQueueIntegration ajQueue;
     private final java.util.concurrent.ConcurrentMap<java.util.UUID, com.velocitypowered.api.scheduler.ScheduledTask>
             notificationTasks = new java.util.concurrent.ConcurrentHashMap<>();
@@ -62,6 +63,7 @@ public final class OpenGateVelocityPlugin {
         if (server.getPluginManager().isLoaded("floodgate")) {
             try {
                 floodgate = new FloodgateApiIdentity();
+                floodgateEnabled = true;
                 logger.info("Floodgate integration enabled");
             } catch (LinkageError | RuntimeException exception) {
                 logger.warn("Floodgate API unavailable; Bedrock authentication will fail closed");
@@ -109,7 +111,9 @@ public final class OpenGateVelocityPlugin {
                         .aliases(openGate.config().commands().aliases("opengate").toArray(String[]::new))
                         .plugin(this).build(),
                 new VelocityAdminCommand(this));
-        logger.info("OpenGate authentication engine enabled on Velocity");
+        dev.lunynt.opengate.StartupLog.lines(
+                "Velocity", "0.1.0", openGate.config(), floodgateEnabled, true)
+                .forEach(logger::info);
     }
 
     public OpenGate openGate() {

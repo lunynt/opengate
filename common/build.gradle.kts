@@ -9,7 +9,7 @@ dependencies {
     implementation("org.xerial:sqlite-jdbc:3.53.4.0")
     implementation("org.postgresql:postgresql:42.7.12")
     implementation("com.mysql:mysql-connector-j:9.5.0")
-    implementation("org.mariadb.jdbc:mariadb-java-client:3.5.9")
+    implementation("org.mariadb.jdbc:mariadb-java-client:3.5.10")
     implementation("com.h2database:h2:2.4.240")
     implementation("io.lettuce:lettuce-core:7.7.0.RELEASE")
     implementation("com.fasterxml.jackson.core:jackson-core:2.22.2")

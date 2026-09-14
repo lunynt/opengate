@@ -204,6 +204,13 @@ final class YamlConfiguration {
         add(keys, "redis.timeout-millis", "redis-timeout-millis");
         add(keys, "integrations.ajqueue.enabled", "ajqueue-enabled");
         add(keys, "integrations.ajqueue.target", "ajqueue-target");
+        add(keys, "notifications.chat", "notifications-chat");
+        add(keys, "notifications.titles", "notifications-titles");
+        add(keys, "notifications.action-bar", "notifications-action-bar");
+        add(keys, "notifications.reminder-interval-seconds", "notifications-reminder-interval-seconds");
+        add(keys, "notifications.title.fade-in-millis", "notifications-title-fade-in-millis");
+        add(keys, "notifications.title.stay-millis", "notifications-title-stay-millis");
+        add(keys, "notifications.title.fade-out-millis", "notifications-title-fade-out-millis");
         add(keys, "minecraft-dialogs.enabled", "minecraft-dialogs-enabled");
         add(keys, "offline-whitelist.enabled", "offline-whitelist-enabled");
         add(keys, "offline-whitelist.players", "offline-whitelist");

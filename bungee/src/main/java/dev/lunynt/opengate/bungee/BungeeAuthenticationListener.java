@@ -146,7 +146,7 @@ final class BungeeAuthenticationListener implements Listener {
 
         if (session.state() == AuthenticationState.AUTHENTICATED) {
             session.release();
-            player.sendMessage(plugin.message(player, "automatic-login"));
+            player.sendMessage(plugin.message(player, automaticLoginMessage(session)));
             plugin.connectToLobby(player);
         } else if (session.state() == AuthenticationState.AWAITING_REGISTRATION) {
             player.sendMessage(plugin.message(player, "register-prompt"));
@@ -163,6 +163,14 @@ final class BungeeAuthenticationListener implements Listener {
         return plugin.openGate().sessions().find(playerId)
                 .map(session -> session.state() != AuthenticationState.RELEASED)
                 .orElse(true);
+    }
+
+    private String automaticLoginMessage(dev.lunynt.opengate.auth.AuthenticationSession session) {
+        return switch (session.identity().orElseThrow().type()) {
+            case PREMIUM -> "premium-login";
+            case FLOODGATE -> "geyser-login";
+            case OFFLINE -> "automatic-login";
+        };
     }
 
     private void deny(PreLoginEvent event, String message) {

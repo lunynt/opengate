@@ -86,11 +86,17 @@ public final class OpenGateBungeePlugin extends Plugin {
             player.disconnect(message(player, "queue-unavailable"));
             return;
         }
-        openGate.config().lobbyServers().stream()
+        var destination = openGate.config().lobbyServers().stream()
                 .map(name -> getProxy().getServerInfo(name))
                 .filter(java.util.Objects::nonNull)
-                .findFirst()
-                .ifPresent(player::connect);
+                .findFirst();
+        if (destination.isEmpty()) {
+            getLogger().severe("None of the configured lobby servers exist: "
+                    + openGate.config().lobbyServers());
+            player.disconnect(message(player, "lobby-missing"));
+            return;
+        }
+        player.connect(destination.orElseThrow());
     }
 
     private void closeAfterStartupFailure(Throwable failure) {

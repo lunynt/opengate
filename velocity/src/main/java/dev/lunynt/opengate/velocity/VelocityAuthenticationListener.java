@@ -118,14 +118,16 @@ final class VelocityAuthenticationListener {
 
         if (session.state() == AuthenticationState.AUTHENTICATED) {
             session.release();
-            player.sendMessage(plugin.message(player, "automatic-login"));
+            plugin.showAuthenticationSuccess(player, automaticLoginMessage(session), automaticLoginSubtitle(session));
             plugin.connectToLobby(player);
         } else if (session.state() == AuthenticationState.AWAITING_REGISTRATION) {
-            player.sendMessage(plugin.message(player, "register-prompt"));
+            plugin.startAuthenticationReminder(player, "register-prompt", "prompt-subtitle-register");
         } else if (session.state() == AuthenticationState.AWAITING_TOTP_ENROLLMENT) {
-            player.sendMessage(plugin.message(player, "totp-enrollment-required"));
+            plugin.startAuthenticationReminder(player, "totp-enrollment-required", "prompt-subtitle-totp");
         } else {
-            player.sendMessage(plugin.message(player, "login-prompt"));
+            plugin.startAuthenticationReminder(player, "login-prompt",
+                    session.state() == AuthenticationState.AWAITING_TOTP
+                            ? "prompt-subtitle-totp" : "prompt-subtitle-login");
         }
     }
 
@@ -133,6 +135,7 @@ final class VelocityAuthenticationListener {
     public void onDisconnect(DisconnectEvent event) {
         var pending = pendingCookies.remove(event.getPlayer().getUniqueId());
         if (pending != null) pending.complete(null);
+        plugin.stopAuthenticationReminder(event.getPlayer().getUniqueId());
         plugin.openGate().sessions().close(event.getPlayer().getUniqueId());
     }
 
@@ -181,6 +184,22 @@ final class VelocityAuthenticationListener {
                 .find(playerId)
                 .map(session -> session.state() != AuthenticationState.RELEASED)
                 .orElse(true);
+    }
+
+    private String automaticLoginMessage(dev.lunynt.opengate.auth.AuthenticationSession session) {
+        return switch (session.identity().orElseThrow().type()) {
+            case PREMIUM -> "premium-login";
+            case FLOODGATE -> "geyser-login";
+            case OFFLINE -> "automatic-login";
+        };
+    }
+
+    private String automaticLoginSubtitle(dev.lunynt.opengate.auth.AuthenticationSession session) {
+        return switch (session.identity().orElseThrow().type()) {
+            case PREMIUM -> "login-subtitle-premium";
+            case FLOODGATE -> "login-subtitle-geyser";
+            case OFFLINE -> "login-subtitle-session";
+        };
     }
 
     private Component message(String key) {

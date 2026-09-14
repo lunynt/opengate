@@ -110,7 +110,7 @@ final class PaperAuthenticationListener implements Listener {
 
         if (session.state() == AuthenticationState.AUTHENTICATED) {
             session.release();
-            player.sendMessage(message(player, "automatic-login"));
+            player.sendMessage(message(player, automaticLoginMessage(session)));
         } else if (session.state() == AuthenticationState.AWAITING_REGISTRATION) {
             player.sendMessage(message(player, "register-prompt"));
             plugin.showAuthenticationDialog(player, true);
@@ -134,6 +134,14 @@ final class PaperAuthenticationListener implements Listener {
             org.bukkit.entity.Player player, dev.lunynt.opengate.auth.AuthenticationSession session) {
         return player.isOnline()
                 && plugin.openGate().sessions().find(player.getUniqueId()).orElse(null) == session;
+    }
+
+    private String automaticLoginMessage(dev.lunynt.opengate.auth.AuthenticationSession session) {
+        return switch (session.identity().orElseThrow().type()) {
+            case PREMIUM -> "premium-login";
+            case FLOODGATE -> "geyser-login";
+            case OFFLINE -> "automatic-login";
+        };
     }
 
     @EventHandler

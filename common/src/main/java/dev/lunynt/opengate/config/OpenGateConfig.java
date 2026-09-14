@@ -36,6 +36,7 @@ public record OpenGateConfig(
         Duration cookieSessionLifetime,
         RedisConfiguration redis,
         AjQueueConfiguration ajQueue,
+        NotificationConfiguration notifications,
         boolean minecraftDialogsEnabled,
         OfflineWhitelistConfiguration offlineWhitelist) {
 
@@ -128,6 +129,18 @@ public record OpenGateConfig(
                 # Queue authenticated players instead of connecting directly.
                 enabled: false
                 target: lobby
+
+            # Login prompts and success messages shown to players.
+            notifications:
+              chat: true
+              titles: true
+              action-bar: true
+              # Repeat login/register instructions while the player is in the auth server.
+              reminder-interval-seconds: 3
+              title:
+                fade-in-millis: 250
+                stay-millis: 1800
+                fade-out-millis: 500
 
             minecraft-dialogs:
               # Show login/register dialogs on clients that support them.
@@ -223,6 +236,14 @@ public record OpenGateConfig(
                 Duration.ofHours(integer(properties, "cookie-session-hours", 12)),
                 RedisConfiguration.from(properties),
                 AjQueueConfiguration.from(properties),
+                new NotificationConfiguration(
+                        bool(properties, "notifications-chat", true),
+                        bool(properties, "notifications-titles", true),
+                        bool(properties, "notifications-action-bar", true),
+                        Duration.ofSeconds(integer(properties, "notifications-reminder-interval-seconds", 3)),
+                        Duration.ofMillis(integer(properties, "notifications-title-fade-in-millis", 250)),
+                        Duration.ofMillis(integer(properties, "notifications-title-stay-millis", 1800)),
+                        Duration.ofMillis(integer(properties, "notifications-title-fade-out-millis", 500))),
                 bool(properties, "minecraft-dialogs-enabled", true),
                 OfflineWhitelistConfiguration.from(properties));
     }

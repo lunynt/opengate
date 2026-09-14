@@ -124,11 +124,13 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
                     if (session.state() == AuthenticationState.AUTHENTICATED) {
                         session.release();
                         plugin.issueSessionCookie(player, accountId(player));
-                        player.sendMessage(message(player, "registration-success"));
+                        plugin.showAuthenticationSuccess(player, "registration-success", "login-subtitle-registration");
                         plugin.connectToLobby(player);
                     } else {
-                        player.sendMessage(message(player, session.state() == AuthenticationState.AWAITING_TOTP
-                                ? "totp-prompt" : "totp-enrollment-required"));
+                        plugin.startAuthenticationReminder(player,
+                                session.state() == AuthenticationState.AWAITING_TOTP
+                                        ? "totp-prompt" : "totp-enrollment-required",
+                                "prompt-subtitle-totp");
                     }
                 });
         Arrays.fill(password, '\0');
@@ -171,12 +173,12 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
             if (session.state() == AuthenticationState.AUTHENTICATED) {
                 session.release();
                 plugin.issueSessionCookie(player, accountId(player));
-                player.sendMessage(message(player, "login-success"));
+                plugin.showAuthenticationSuccess(player, "login-success", "login-subtitle-password");
                 plugin.connectToLobby(player);
             } else if (session.state() == AuthenticationState.AWAITING_TOTP_ENROLLMENT) {
-                player.sendMessage(message(player, "totp-enrollment-required"));
+                plugin.startAuthenticationReminder(player, "totp-enrollment-required", "prompt-subtitle-totp");
             } else {
-                player.sendMessage(message(player, "totp-prompt"));
+                plugin.startAuthenticationReminder(player, "totp-prompt", "prompt-subtitle-totp");
             }
         });
         Arrays.fill(password, '\0');
@@ -209,7 +211,7 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
             session.acceptTotp();
             session.release();
             plugin.issueSessionCookie(player, accountId(player));
-            player.sendMessage(message(player, "totp-success"));
+            plugin.showAuthenticationSuccess(player, "totp-success", "login-subtitle-totp");
             plugin.connectToLobby(player);
         }).schedule();
     }
@@ -244,11 +246,13 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
                         session.completeTotpEnrollment();
                         session.release();
                         plugin.issueSessionCookie(player, accountId(player));
+                        plugin.showAuthenticationSuccess(player, "totp-enabled", "login-subtitle-totp");
                         plugin.connectToLobby(player);
                     } else if (confirmed) {
                         plugin.clearSessionCookie(player, accountId(player));
+                        player.sendMessage(message(player, "totp-enabled"));
                     }
-                    player.sendMessage(message(player, confirmed ? "totp-enabled" : "totp-invalid"));
+                    if (!confirmed) player.sendMessage(message(player, "totp-invalid"));
                 }).schedule();
             }
             case "disable" -> verifyPasswordThen(player, arguments, () -> {

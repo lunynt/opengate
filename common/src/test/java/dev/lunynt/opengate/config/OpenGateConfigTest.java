@@ -23,6 +23,11 @@ class OpenGateConfigTest {
         assertEquals("limbo", config.limboServer());
         assertEquals(java.util.List.of("lobby"), config.lobbyServers());
         assertEquals(DatabaseType.SQLITE, config.database().type());
+        assertEquals(true, config.notifications().chatEnabled());
+        assertEquals(true, config.notifications().titlesEnabled());
+        assertEquals(true, config.notifications().actionBarEnabled());
+        assertEquals(Duration.ofSeconds(3), config.notifications().reminderInterval());
+        assertEquals(Duration.ofMillis(1800), config.notifications().titleStay());
         assertEquals(true, Files.exists(directory.resolve("config.yml")));
     }
 
@@ -93,6 +98,32 @@ class OpenGateConfigTest {
         Files.writeString(file, Files.readString(file).replace(
                 "enabled: true\n    # Automatically select premium mode",
                 "enabled: maybe\n    # Automatically select premium mode"));
+
+        assertThrows(IllegalArgumentException.class, () -> OpenGateConfig.load(directory));
+    }
+
+    @Test
+    void loadsNotificationSettings() throws Exception {
+        OpenGateConfig.load(directory);
+        var file = directory.resolve("config.yml");
+        Files.writeString(file, Files.readString(file)
+                .replace("action-bar: true", "action-bar: false")
+                .replace("reminder-interval-seconds: 3", "reminder-interval-seconds: 5")
+                .replace("stay-millis: 1800", "stay-millis: 2500"));
+
+        var config = OpenGateConfig.load(directory);
+
+        assertEquals(false, config.notifications().actionBarEnabled());
+        assertEquals(Duration.ofSeconds(5), config.notifications().reminderInterval());
+        assertEquals(Duration.ofMillis(2500), config.notifications().titleStay());
+    }
+
+    @Test
+    void rejectsNonPositiveNotificationInterval() throws Exception {
+        OpenGateConfig.load(directory);
+        var file = directory.resolve("config.yml");
+        Files.writeString(file, Files.readString(file)
+                .replace("reminder-interval-seconds: 3", "reminder-interval-seconds: 0"));
 
         assertThrows(IllegalArgumentException.class, () -> OpenGateConfig.load(directory));
     }

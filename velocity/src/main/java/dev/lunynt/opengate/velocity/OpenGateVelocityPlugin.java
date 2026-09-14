@@ -33,6 +33,8 @@ public final class OpenGateVelocityPlugin {
     private OpenGate openGate;
     private FloodgateIdentity floodgate = FloodgateIdentity.unavailable();
     private dev.lunynt.opengate.integration.AjQueueIntegration ajQueue;
+    private final java.util.concurrent.ConcurrentMap<java.util.UUID, com.velocitypowered.api.scheduler.ScheduledTask>
+            notificationTasks = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Inject
     public OpenGateVelocityPlugin(Logger logger, @DataDirectory Path dataDirectory, ProxyServer server) {
@@ -148,11 +150,16 @@ public final class OpenGateVelocityPlugin {
             player.disconnect(message(player, "queue-unavailable"));
             return;
         }
-        openGate.config().lobbyServers().stream()
+        var destination = openGate.config().lobbyServers().stream()
                 .map(server::getServer)
                 .flatMap(java.util.Optional::stream)
-                .findFirst()
-                .ifPresent(candidate -> player.createConnectionRequest(candidate).fireAndForget());
+                .findFirst();
+        if (destination.isEmpty()) {
+            logger.error("None of the configured lobby servers exist: {}", openGate.config().lobbyServers());
+            player.disconnect(message(player, "lobby-missing"));
+            return;
+        }
+        player.createConnectionRequest(destination.orElseThrow()).fireAndForget();
     }
 
     private void closeAfterStartupFailure(Throwable failure) {
@@ -167,6 +174,8 @@ public final class OpenGateVelocityPlugin {
 
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
+        notificationTasks.values().forEach(com.velocitypowered.api.scheduler.ScheduledTask::cancel);
+        notificationTasks.clear();
         if (openGate != null) {
             openGate.close();
         }
@@ -195,5 +204,53 @@ public final class OpenGateVelocityPlugin {
     Component message(com.velocitypowered.api.proxy.Player player, String key) {
         return LegacyComponentSerializer.legacyAmpersand()
                 .deserialize(openGate.messages().get(player.getEffectiveLocale(), key));
+    }
+
+    void startAuthenticationReminder(
+            com.velocitypowered.api.proxy.Player player, String messageKey, String subtitleKey) {
+        stopAuthenticationReminder(player.getUniqueId());
+        showNotification(player, messageKey, "prompt-title", subtitleKey);
+        var task = server.getScheduler()
+                .buildTask(this, () -> {
+                    if (!player.isActive() || openGate.sessions().find(player.getUniqueId())
+                            .map(session -> session.state() == dev.lunynt.opengate.auth.AuthenticationState.RELEASED)
+                            .orElse(true)) {
+                        stopAuthenticationReminder(player.getUniqueId());
+                        return;
+                    }
+                    showNotification(player, messageKey, "prompt-title", subtitleKey);
+                })
+                .repeat(openGate.config().notifications().reminderInterval())
+                .schedule();
+        notificationTasks.put(player.getUniqueId(), task);
+    }
+
+    void showAuthenticationSuccess(
+            com.velocitypowered.api.proxy.Player player, String messageKey, String subtitleKey) {
+        stopAuthenticationReminder(player.getUniqueId());
+        showNotification(player, messageKey, "login-title", subtitleKey);
+    }
+
+    void stopAuthenticationReminder(java.util.UUID playerId) {
+        var task = notificationTasks.remove(playerId);
+        if (task != null) task.cancel();
+    }
+
+    private void showNotification(com.velocitypowered.api.proxy.Player player,
+            String messageKey, String titleKey, String subtitleKey) {
+        var settings = openGate.config().notifications();
+        var body = message(player, messageKey);
+        if (settings.chatEnabled()) player.sendMessage(body);
+        if (settings.actionBarEnabled()) player.sendActionBar(body);
+        if (!settings.titlesEnabled()) return;
+        var serializer = LegacyComponentSerializer.legacyAmpersand();
+        var locale = player.getEffectiveLocale();
+        player.showTitle(net.kyori.adventure.title.Title.title(
+                serializer.deserialize(openGate.messages().get(locale, titleKey)),
+                serializer.deserialize(openGate.messages().get(locale, subtitleKey)),
+                net.kyori.adventure.title.Title.Times.times(
+                        settings.titleFadeIn(),
+                        settings.titleStay(),
+                        settings.titleFadeOut())));
     }
 }

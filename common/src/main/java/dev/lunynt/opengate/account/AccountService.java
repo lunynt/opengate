@@ -27,6 +27,7 @@ public final class AccountService implements AutoCloseable {
     private final LoginRateLimiter accountRateLimiter;
     private final LoginRateLimiter registrationRateLimiter;
     private final AuditLog auditLog;
+    private final java.util.function.Predicate<RegistrationRequest> registrationPolicy;
     private final HashMap<String, Integer> inFlightByAddress = new HashMap<>();
 
     public AccountService(
@@ -40,6 +41,23 @@ public final class AccountService implements AutoCloseable {
             LoginRateLimiter accountRateLimiter,
             LoginRateLimiter registrationRateLimiter,
             AuditLog auditLog) {
+        this(accounts, passwords, cryptoExecutor, clock, minimumPasswordLength, maximumPasswordLength,
+                loginRateLimiter, accountRateLimiter, registrationRateLimiter, auditLog,
+                ignored -> true);
+    }
+
+    public AccountService(
+            AccountRepository accounts,
+            PasswordHasher passwords,
+            ExecutorService cryptoExecutor,
+            Clock clock,
+            int minimumPasswordLength,
+            int maximumPasswordLength,
+            LoginRateLimiter loginRateLimiter,
+            LoginRateLimiter accountRateLimiter,
+            LoginRateLimiter registrationRateLimiter,
+            AuditLog auditLog,
+            java.util.function.Predicate<RegistrationRequest> registrationPolicy) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.passwords = Objects.requireNonNull(passwords, "passwords");
         this.cryptoExecutor = Objects.requireNonNull(cryptoExecutor, "cryptoExecutor");
@@ -50,6 +68,7 @@ public final class AccountService implements AutoCloseable {
         this.accountRateLimiter = Objects.requireNonNull(accountRateLimiter, "accountRateLimiter");
         this.registrationRateLimiter = Objects.requireNonNull(registrationRateLimiter, "registrationRateLimiter");
         this.auditLog = Objects.requireNonNull(auditLog, "auditLog");
+        this.registrationPolicy = Objects.requireNonNull(registrationPolicy, "registrationPolicy");
     }
 
     public CompletableFuture<Account> register(
@@ -64,6 +83,9 @@ public final class AccountService implements AutoCloseable {
         return submit(addressKey,
                 () -> {
                     try {
+                        if (!registrationPolicy.test(new RegistrationRequest(username, identityType, address))) {
+                            throw new IllegalStateException("premium ownership changed during registration");
+                        }
                         var existing = accounts.findByPlayerId(playerId);
                         if (existing.isPresent()) {
                             var account = existing.orElseThrow();
@@ -101,6 +123,8 @@ public final class AccountService implements AutoCloseable {
                     }
                 });
     }
+
+    public record RegistrationRequest(String username, IdentityType identityType, String address) {}
 
     public CompletableFuture<AuthenticationResult> authenticate(
             UUID playerId, char[] password, String address) {

@@ -35,7 +35,8 @@ final class VelocityAuthenticationListener {
                     event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
                     return;
                 }
-                var decision = plugin.openGate().identities().resolve(event.getUsername());
+                var decision = plugin.openGate().identities().resolve(event.getUsername(),
+                        event.getConnection().getRemoteAddress().getAddress().getHostAddress());
                 event.setResult(switch (decision) {
                     case ONLINE -> PreLoginEvent.PreLoginComponentResult.forceOnlineMode();
                     case OFFLINE -> PreLoginEvent.PreLoginComponentResult.forceOfflineMode();
@@ -117,7 +118,7 @@ final class VelocityAuthenticationListener {
         }
 
         if (session.state() == AuthenticationState.AUTHENTICATED) {
-            session.release();
+            plugin.openGate().release(session);
             plugin.showAuthenticationSuccess(player, automaticLoginMessage(session), automaticLoginSubtitle(session));
             plugin.connectToLobby(player);
         } else if (session.state() == AuthenticationState.AWAITING_REGISTRATION) {

@@ -28,6 +28,7 @@ class OpenGateConfigTest {
         assertEquals(true, config.notifications().actionBarEnabled());
         assertEquals(Duration.ofSeconds(3), config.notifications().reminderInterval());
         assertEquals(Duration.ofMillis(1800), config.notifications().titleStay());
+        assertEquals(true, config.consoleColors());
         assertEquals(true, Files.exists(directory.resolve("config.yml")));
     }
 

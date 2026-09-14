@@ -120,7 +120,7 @@ final class PaperAuthenticationCommand implements CommandExecutor {
                     }
                     session.register();
                     if (session.state() == AuthenticationState.AUTHENTICATED) {
-                        session.release();
+                        plugin.openGate().release(session);
                         plugin.issueSessionCookie(player, accountId(player));
                         player.sendMessage(message(player, "registration-success"));
                     } else {
@@ -168,7 +168,7 @@ final class PaperAuthenticationCommand implements CommandExecutor {
                     }
                     session.acceptPassword();
                     if (session.state() == AuthenticationState.AUTHENTICATED) {
-                        session.release();
+                        plugin.openGate().release(session);
                         plugin.issueSessionCookie(player, accountId(player));
                         player.sendMessage(message(player, "login-success"));
                     } else if (session.state() == AuthenticationState.AWAITING_TOTP_ENROLLMENT) {
@@ -220,7 +220,7 @@ final class PaperAuthenticationCommand implements CommandExecutor {
             return;
         }
         session.acceptTotp();
-        session.release();
+        plugin.openGate().release(session);
         plugin.issueSessionCookie(player, accountId(player));
         player.sendMessage(message(player, "totp-success"));
     }
@@ -256,7 +256,7 @@ final class PaperAuthenticationCommand implements CommandExecutor {
                         if (confirmed && isTotpEnrollment(player)) {
                             var session = plugin.openGate().sessions().find(player.getUniqueId()).orElseThrow();
                             session.completeTotpEnrollment();
-                            session.release();
+                            plugin.openGate().release(session);
                             plugin.issueSessionCookie(player, accountId(player));
                         } else if (confirmed) {
                             plugin.clearSessionCookie(player, accountId(player));

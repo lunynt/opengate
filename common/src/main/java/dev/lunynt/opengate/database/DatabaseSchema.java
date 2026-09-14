@@ -59,6 +59,13 @@ public final class DatabaseSchema {
                     + "occurred_at BIGINT NOT NULL, event_type VARCHAR(64) NOT NULL, player_id VARCHAR(36), "
                     + "username VARCHAR(64), address_fingerprint VARCHAR(128), detail VARCHAR(256))");
             statement.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS rate_limit_failures (
+                        event_id VARCHAR(36) PRIMARY KEY NOT NULL,
+                        limiter_key VARCHAR(256) NOT NULL,
+                        failed_at BIGINT NOT NULL
+                    )
+                    """);
+            statement.executeUpdate("""
                     CREATE TABLE IF NOT EXISTS totp_replay (
                         player_id VARCHAR(36) PRIMARY KEY NOT NULL,
                         last_step BIGINT NOT NULL,
@@ -103,6 +110,8 @@ public final class DatabaseSchema {
                     "CREATE INDEX audit_events_player_time ON audit_events(player_id, occurred_at)");
             createIndex(connection, statement, "audit_events", "audit_events_type_time",
                     "CREATE INDEX audit_events_type_time ON audit_events(event_type, occurred_at)");
+            createIndex(connection, statement, "rate_limit_failures", "rate_limit_failures_key_time",
+                    "CREATE INDEX rate_limit_failures_key_time ON rate_limit_failures(limiter_key, failed_at)");
         }
     }
 

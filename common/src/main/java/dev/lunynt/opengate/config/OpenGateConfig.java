@@ -37,6 +37,7 @@ public record OpenGateConfig(
         RedisConfiguration redis,
         AjQueueConfiguration ajQueue,
         NotificationConfiguration notifications,
+        boolean consoleColors,
         boolean minecraftDialogsEnabled,
         OfflineWhitelistConfiguration offlineWhitelist) {
 
@@ -142,6 +143,10 @@ public record OpenGateConfig(
                 stay-millis: 1800
                 fade-out-millis: 500
 
+            console:
+              # Use ANSI colors in the startup summary. Disable this for panels that show raw escape codes.
+              colors: true
+
             minecraft-dialogs:
               # Show login/register dialogs on clients that support them.
               enabled: true
@@ -244,6 +249,7 @@ public record OpenGateConfig(
                         Duration.ofMillis(integer(properties, "notifications-title-fade-in-millis", 250)),
                         Duration.ofMillis(integer(properties, "notifications-title-stay-millis", 1800)),
                         Duration.ofMillis(integer(properties, "notifications-title-fade-out-millis", 500))),
+                bool(properties, "console-colors", true),
                 bool(properties, "minecraft-dialogs-enabled", true),
                 OfflineWhitelistConfiguration.from(properties));
     }

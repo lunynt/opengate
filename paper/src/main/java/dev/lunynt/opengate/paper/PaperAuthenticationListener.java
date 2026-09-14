@@ -109,7 +109,7 @@ final class PaperAuthenticationListener implements Listener {
         }
 
         if (session.state() == AuthenticationState.AUTHENTICATED) {
-            session.release();
+            plugin.openGate().release(session);
             player.sendMessage(message(player, automaticLoginMessage(session)));
         } else if (session.state() == AuthenticationState.AWAITING_REGISTRATION) {
             player.sendMessage(message(player, "register-prompt"));

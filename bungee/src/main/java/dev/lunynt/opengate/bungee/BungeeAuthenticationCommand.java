@@ -120,7 +120,7 @@ final class BungeeAuthenticationCommand extends Command {
                         }
                         session.register();
                         if (session.state() == AuthenticationState.AUTHENTICATED) {
-                            session.release();
+                            plugin.openGate().release(session);
                             plugin.issueSessionCookie(player, accountId(player));
                             player.sendMessage(plugin.message(player, "registration-success"));
                             plugin.connectToLobby(player);
@@ -181,7 +181,7 @@ final class BungeeAuthenticationCommand extends Command {
         }
         session.acceptPassword();
         if (session.state() == AuthenticationState.AUTHENTICATED) {
-            session.release();
+            plugin.openGate().release(session);
             plugin.issueSessionCookie(player, accountId(player));
             player.sendMessage(plugin.message(player, "login-success"));
             plugin.connectToLobby(player);
@@ -214,7 +214,7 @@ final class BungeeAuthenticationCommand extends Command {
                 return;
             }
             session.acceptTotp();
-            session.release();
+            plugin.openGate().release(session);
             plugin.issueSessionCookie(player, accountId(player));
             player.sendMessage(plugin.message(player, "totp-success"));
             plugin.connectToLobby(player);
@@ -245,7 +245,7 @@ final class BungeeAuthenticationCommand extends Command {
                     if (isTotpEnrollment(player)) {
                         var session = plugin.openGate().sessions().find(player.getUniqueId()).orElseThrow();
                         session.completeTotpEnrollment();
-                        session.release();
+                        plugin.openGate().release(session);
                         plugin.issueSessionCookie(player, accountId(player));
                         plugin.connectToLobby(player);
                     } else {

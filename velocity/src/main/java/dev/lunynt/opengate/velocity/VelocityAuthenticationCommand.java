@@ -122,7 +122,7 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
                     }
                     session.register();
                     if (session.state() == AuthenticationState.AUTHENTICATED) {
-                        session.release();
+                        plugin.openGate().release(session);
                         plugin.issueSessionCookie(player, accountId(player));
                         plugin.showAuthenticationSuccess(player, "registration-success", "login-subtitle-registration");
                         plugin.connectToLobby(player);
@@ -171,7 +171,7 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
             }
             session.acceptPassword();
             if (session.state() == AuthenticationState.AUTHENTICATED) {
-                session.release();
+                plugin.openGate().release(session);
                 plugin.issueSessionCookie(player, accountId(player));
                 plugin.showAuthenticationSuccess(player, "login-success", "login-subtitle-password");
                 plugin.connectToLobby(player);
@@ -209,7 +209,7 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
                 return;
             }
             session.acceptTotp();
-            session.release();
+            plugin.openGate().release(session);
             plugin.issueSessionCookie(player, accountId(player));
             plugin.showAuthenticationSuccess(player, "totp-success", "login-subtitle-totp");
             plugin.connectToLobby(player);
@@ -244,7 +244,7 @@ final class VelocityAuthenticationCommand implements SimpleCommand {
                     if (confirmed && isTotpEnrollment(player)) {
                         var session = plugin.openGate().sessions().find(player.getUniqueId()).orElseThrow();
                         session.completeTotpEnrollment();
-                        session.release();
+                        plugin.openGate().release(session);
                         plugin.issueSessionCookie(player, accountId(player));
                         plugin.showAuthenticationSuccess(player, "totp-enabled", "login-subtitle-totp");
                         plugin.connectToLobby(player);

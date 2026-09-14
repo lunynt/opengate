@@ -44,6 +44,10 @@ public final class IdentityResolver {
     }
 
     public IdentityDecision resolve(String username) {
+        return resolve(username, "internal");
+    }
+
+    public IdentityDecision resolve(String username, String address) {
         if (!VALID_USERNAME.matcher(username).matches()) {
             return IdentityDecision.DENY_INVALID_USERNAME;
         }
@@ -64,7 +68,8 @@ public final class IdentityResolver {
             return offlineDecision(username);
         }
 
-        var result = profiles.find(username);
+        var result = profiles instanceof MojangProfileLookup mojang
+                ? mojang.find(username, address) : profiles.find(username);
         if (result.status() == ProfileLookupResult.Status.UNAVAILABLE) {
             return IdentityDecision.DENY_LOOKUP_UNAVAILABLE;
         }

@@ -211,6 +211,7 @@ final class YamlConfiguration {
         add(keys, "notifications.title.fade-in-millis", "notifications-title-fade-in-millis");
         add(keys, "notifications.title.stay-millis", "notifications-title-stay-millis");
         add(keys, "notifications.title.fade-out-millis", "notifications-title-fade-out-millis");
+        add(keys, "console.colors", "console-colors");
         add(keys, "minecraft-dialogs.enabled", "minecraft-dialogs-enabled");
         add(keys, "offline-whitelist.enabled", "offline-whitelist-enabled");
         add(keys, "offline-whitelist.players", "offline-whitelist");

@@ -95,6 +95,7 @@ public final class OpenGate implements AutoCloseable {
             startupResources.push(dataSource);
             DatabaseSchema.migrate(dataSource);
             var repository = new JdbcAccountRepository(dataSource);
+            var profiles = new MojangProfileLookup(config.premiumLookupTimeout());
             if (config.database().type() == DatabaseType.SQLITE) {
                 SecureFiles.makeOwnerOnly(dataDirectory.resolve("opengate.db"));
             }
@@ -117,22 +118,24 @@ public final class OpenGate implements AutoCloseable {
                     clock,
                     config.minimumPasswordLength(),
                     config.maximumPasswordLength(),
-                    new LoginRateLimiter(config.maximumIpFailures(), config.ipFailureWindow(), clock),
-                    new LoginRateLimiter(config.maximumAccountFailures(), config.ipFailureWindow(), clock),
+                    new LoginRateLimiter(config.maximumIpFailures(), config.ipFailureWindow(), clock,
+                            dataSource, "login-ip"),
+                    new LoginRateLimiter(config.maximumAccountFailures(), config.ipFailureWindow(), clock,
+                            dataSource, "login-account"),
                     new LoginRateLimiter(
-                            config.maximumRegistrationsPerIp(), config.registrationWindow(), clock),
-                    auditLog);
+                            config.maximumRegistrationsPerIp(), config.registrationWindow(), clock,
+                            dataSource, "registration-ip"),
+                    auditLog,
+                    request -> request.identityType() != dev.lunynt.opengate.auth.IdentityType.OFFLINE
+                            || !config.premiumLookupEnabled() || !config.reservePremiumNames()
+                            || profiles.findFresh(request.username(), request.address()).status()
+                                    == dev.lunynt.opengate.identity.ProfileLookupResult.Status.NOT_FOUND);
             startupResources.push(accounts);
-            var profiles = new MojangProfileLookup(config.premiumLookupTimeout());
             var sessions = new SessionRegistry(clock);
             var cluster = config.redis().enabled()
                     ? new RedisClusterCoordinator(config.redis(), sessions)
                     : ClusterCoordinator.disabled();
             startupResources.push(cluster);
-            sessions.onReleased(session -> session.identity().ifPresent(identity ->
-                    cluster.authenticated(identity.playerId()).whenComplete((ignored, error) -> {
-                        if (error != null) sessions.invalidate(session.connectionId());
-                    })));
             var cookieSessions = new CookieSessionService(
                     dataSource, clock, config.cookieSessionLifetime(), config.cookieSessionsEnabled());
             startupResources.push(cookieSessions);
@@ -156,8 +159,10 @@ public final class OpenGate implements AutoCloseable {
                                     SecretKeyDerivation.derive(secretKey, "totp-encryption", "AES"), secretKey),
                             clock,
                             auditLog,
-                            new LoginRateLimiter(config.maximumIpFailures(), config.ipFailureWindow(), clock),
-                            new LoginRateLimiter(config.maximumAccountFailures(), config.ipFailureWindow(), clock)),
+                            new LoginRateLimiter(config.maximumIpFailures(), config.ipFailureWindow(), clock,
+                                    dataSource, "totp-ip"),
+                            new LoginRateLimiter(config.maximumAccountFailures(), config.ipFailureWindow(), clock,
+                                    dataSource, "totp-account")),
                     auditLog,
                     new AdminService(
                             accounts,
@@ -186,6 +191,23 @@ public final class OpenGate implements AutoCloseable {
 
     public SessionRegistry sessions() {
         return sessions;
+    }
+
+    /**
+     * Publishes a successful authentication before releasing the local session.
+     * A failed cluster publication invalidates the session instead of allowing
+     * the caller to route an unauthenticated connection.
+     */
+    public void release(dev.lunynt.opengate.auth.AuthenticationSession session) {
+        var identity = session.identity().orElseThrow(() ->
+                new IllegalStateException("cannot release a session without an identity"));
+        try {
+            cluster.authenticated(identity.playerId()).toCompletableFuture().join();
+            session.release();
+        } catch (RuntimeException exception) {
+            sessions.invalidate(session.connectionId());
+            throw exception;
+        }
     }
 
     public AccountService accounts() {

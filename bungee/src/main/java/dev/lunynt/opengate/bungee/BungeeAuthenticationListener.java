@@ -33,7 +33,8 @@ final class BungeeAuthenticationListener implements Listener {
                     event.getConnection().setOnlineMode(false);
                     return;
                 }
-                switch (plugin.openGate().identities().resolve(event.getConnection().getName())) {
+                switch (plugin.openGate().identities().resolve(event.getConnection().getName(),
+                        event.getConnection().getSocketAddress().toString())) {
                     case ONLINE -> event.getConnection().setOnlineMode(true);
                     case OFFLINE -> event.getConnection().setOnlineMode(false);
                     case DENY_INVALID_USERNAME -> deny(event, "invalid-username");
@@ -145,7 +146,7 @@ final class BungeeAuthenticationListener implements Listener {
         }
 
         if (session.state() == AuthenticationState.AUTHENTICATED) {
-            session.release();
+            plugin.openGate().release(session);
             player.sendMessage(plugin.message(player, automaticLoginMessage(session)));
             plugin.connectToLobby(player);
         } else if (session.state() == AuthenticationState.AWAITING_REGISTRATION) {

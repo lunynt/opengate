@@ -28,6 +28,7 @@ public final class MojangProfileLookup implements ProfileLookup {
     private final Duration timeout;
     private final Clock clock;
     private final Semaphore requests = new Semaphore(8);
+    private final ConcurrentHashMap<String, Boolean> requestsByAddress = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CachedResult> cache = new ConcurrentHashMap<>();
 
     public MojangProfileLookup(Duration timeout) {
@@ -46,19 +47,42 @@ public final class MojangProfileLookup implements ProfileLookup {
 
     @Override
     public ProfileLookupResult find(String username) {
+        return find(username, "internal");
+    }
+
+    @Override
+    public ProfileLookupResult findFresh(String username, String address) {
+        return requestLimited(username, address, false);
+    }
+
+    public ProfileLookupResult find(String username, String address) {
+        return requestLimited(username, address, true);
+    }
+
+    private ProfileLookupResult requestLimited(String username, String address, boolean useCache) {
         var key = username.toLowerCase(Locale.ROOT);
-        var cached = cache.get(key);
+        var cached = useCache ? cache.get(key) : null;
         var now = clock.instant();
         if (cached != null && cached.expiresAt().isAfter(now)) return cached.result();
-        if (!requests.tryAcquire()) return ProfileLookupResult.unavailable();
+        var addressKey = address == null || address.isBlank() ? "unknown" : address;
+        if (requestsByAddress.putIfAbsent(addressKey, Boolean.TRUE) != null) {
+            return ProfileLookupResult.unavailable();
+        }
+        if (!requests.tryAcquire()) {
+            requestsByAddress.remove(addressKey);
+            return ProfileLookupResult.unavailable();
+        }
         try {
             var result = request(username);
-            cache(key, result, now.plus(result.status() == ProfileLookupResult.Status.UNAVAILABLE
-                    ? FAILURE_LIFETIME
-                    : RESULT_LIFETIME));
+            if (useCache) {
+                cache(key, result, now.plus(result.status() == ProfileLookupResult.Status.UNAVAILABLE
+                        ? FAILURE_LIFETIME
+                        : RESULT_LIFETIME));
+            }
             return result;
         } finally {
             requests.release();
+            requestsByAddress.remove(addressKey);
         }
     }
 
